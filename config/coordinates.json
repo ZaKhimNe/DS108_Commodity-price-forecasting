@@ -1,0 +1,37 @@
+{
+    "commodities": {
+        "corn": {
+            "ticker": "ZC=F",
+            "locations": [
+                {"name": "Iowa", "lat": 42.03, "lon": -93.64},
+                {"name": "Illinois", "lat": 40.06, "lon": -88.24},
+                {"name": "Nebraska", "lat": 40.82, "lon": -96.68},
+                {"name": "Minnesota", "lat": 44.16, "lon": -94.01},
+                {"name": "Indiana", "lat": 40.42, "lon": -86.91}
+            ]
+        },
+        "coffee": {
+            "ticker": "KC=F",
+            "locations": [
+                {"name": "Sul_de_Minas", "lat": -21.23, "lon": -45.76},
+                {"name": "Cerrado_Mineiro", "lat": -18.91, "lon": -48.26},
+                {"name": "Matas_de_Minas", "lat": -20.75, "lon": -42.87},
+                {"name": "Mogiana", "lat": -20.53, "lon": -47.40},
+                {"name": "Cerrado_Baiano", "lat": -12.15, "lon": -45.80}
+            ]
+        }
+    },
+    "calendar": {
+        "coffee": {
+            "flowering_months": [9, 10, 11],
+            "harvest_months": [5, 6, 7, 8],
+            "lag_to_flowering_days": 240
+        },
+        "corn": {
+            "planting_months": [4, 5],
+            "pollination_months": [7],
+            "harvest_months": [9, 10, 11],
+            "lag_to_pollination_days": 60
+        }
+    }
+}

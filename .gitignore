@@ -1,0 +1,15 @@
+# Môi trường ảo
+venv/
+
+# Thư mục chứa dữ liệu thô và đã xử lý (Tránh đẩy file rác/quá nặng lên Git)
+data/
+!data/.gitkeep
+
+# File cache của hệ thống và Python
+.cache
+.cache.sqlite
+__pycache__/
+*.pyc
+
+# Các file cấu hình nhạy cảm (nếu có)
+.env
