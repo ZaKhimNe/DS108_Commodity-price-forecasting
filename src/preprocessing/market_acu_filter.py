@@ -1,0 +1,103 @@
+import pandas as pd
+import numpy as np
+import os
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+
+INPUT_DIR = os.path.join(PROJECT_ROOT, "data", "raw", "market") 
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "data", "preprocessed", "market")
+
+if not os.path.exists(OUTPUT_DIR):
+    os.makedirs(OUTPUT_DIR)
+
+coffee_input = os.path.join(INPUT_DIR, 'coffee_market.csv')
+coffee_output = os.path.join(OUTPUT_DIR, 'weekly_coffee_clean.csv')
+
+corn_input = os.path.join(INPUT_DIR, 'corn_market.csv')
+corn_output = os.path.join(OUTPUT_DIR, 'weekly_corn_clean.csv')
+
+def clean_raw_market_data(df):
+    df_clean = df.drop(0).copy()
+    df_clean['Date'] = pd.to_datetime(df_clean['Date'], utc=True)
+    numeric_cols = ['Close', 'High', 'Low', 'Open', 'Volume']
+    for col in numeric_cols:
+        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
+    return df_clean.sort_values('Date').reset_index(drop=True)
+
+def apply_acu_filter(df, column='Close', threshold=0.05):
+    df_clean = df.copy()
+    
+    diff_prev = df_clean[column].diff()
+    diff_next = df_clean[column].shift(-1) - df_clean[column]
+    
+    pct_prev = diff_prev / df_clean[column].shift(1)
+    pct_next = diff_next / df_clean[column]
+    
+    anomaly_mask = (
+        (pct_prev.abs() > threshold) & 
+        (pct_next.abs() > threshold) & 
+        (diff_prev * diff_next < 0) 
+    )
+    
+    df_clean.loc[anomaly_mask, column] = np.nan
+    df_clean[column] = df_clean[column].interpolate(method='linear')
+    
+    anomaly_count = anomaly_mask.sum()
+    print(f"[{column}] Đã xử lý {anomaly_count} điểm lỗi API/Flash Crash.")
+    return df_clean, anomaly_count 
+
+def calculate_financial_features(df):
+    df_feat = df.copy()
+    
+    df_feat['log_return'] = np.log(df_feat['Close'] / df_feat['Close'].shift(1))
+    
+    delta = df_feat['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df_feat['RSI_14'] = 100 - (100 / (1 + rs))
+    df_feat['volatility_20d'] = df_feat['log_return'].rolling(window=20).std() * np.sqrt(252)
+    return df_feat.dropna()
+
+def resample_market_to_weekly(df, date_col='Date'):
+    if date_col in df.columns:
+        df[date_col] = pd.to_datetime(df[date_col], utc=True) 
+        df = df.set_index(date_col)
+        
+    ohlcv_dict = {
+        'Open': 'first',
+        'High': 'max',
+        'Low': 'min',
+        'Close': 'last',
+        'Volume': 'sum',
+        'RSI_14': 'last',         
+        'volatility_20d': 'mean'   
+    }
+    
+    agg_dict = {k: v for k, v in ohlcv_dict.items() if k in df.columns}
+    
+    weekly_df = df.resample('W').agg(agg_dict).dropna()
+    
+    return weekly_df.reset_index()
+
+# === CHẠY THỬ PIPELINE ===
+print("Đang xử lý dữ liệu Cà Phê...")
+coffee_df = pd.read_csv(coffee_input)
+coffee_df = clean_raw_market_data(coffee_df)
+coffee_df, kc_c = apply_acu_filter(coffee_df, 'Close', 0.06)
+coffee_df, kc_h = apply_acu_filter(coffee_df, 'High', 0.06)
+coffee_df, kc_l = apply_acu_filter(coffee_df, 'Low', 0.06)
+coffee_weekly = resample_market_to_weekly(calculate_financial_features(coffee_df))
+coffee_weekly.to_csv(coffee_output, index=False)
+print(f"-> Hoàn tất! Đã lưu tại: {coffee_output}")
+
+print("\nĐang xử lý dữ liệu Bắp (Ngô)...")
+corn_df = pd.read_csv(corn_input)
+corn_df = clean_raw_market_data(corn_df)
+corn_df, zc_c = apply_acu_filter(corn_df, 'Close', 0.05)
+corn_df, zc_h = apply_acu_filter(corn_df, 'High', 0.05)
+corn_df, zc_l = apply_acu_filter(corn_df, 'Low', 0.05)
+corn_weekly = resample_market_to_weekly(calculate_financial_features(corn_df))
+corn_weekly.to_csv(corn_output, index=False)
+print(f"-> Hoàn tất! Đã lưu tại: {corn_output}")
