@@ -19,6 +19,7 @@ corn_output = os.path.join(OUTPUT_DIR, 'weekly_corn_clean.csv')
 
 def clean_raw_market_data(df):
     df_clean = df.drop(0).copy()
+    # Áp dụng utc=True để đồng bộ timezone
     df_clean['Date'] = pd.to_datetime(df_clean['Date'], utc=True)
     numeric_cols = ['Close', 'High', 'Low', 'Open', 'Volume']
     for col in numeric_cols:
@@ -58,10 +59,33 @@ def calculate_financial_features(df):
     rs = gain / loss
     df_feat['RSI_14'] = 100 - (100 / (1 + rs))
     df_feat['volatility_20d'] = df_feat['log_return'].rolling(window=20).std() * np.sqrt(252)
+    
+    # Thêm Moving Averages
+    df_feat['SMA_20'] = df_feat['Close'].rolling(window=20).mean()
+    df_feat['SMA_50'] = df_feat['Close'].rolling(window=50).mean()
+    df_feat['EMA_20'] = df_feat['Close'].ewm(span=20).mean()
+    
+    # Bollinger Bands
+    df_feat['BB_middle'] = df_feat['SMA_20']
+    df_feat['BB_upper'] = df_feat['BB_middle'] + 2 * df_feat['Close'].rolling(window=20).std()
+    df_feat['BB_lower'] = df_feat['BB_middle'] - 2 * df_feat['Close'].rolling(window=20).std()
+    
+    # MACD
+    ema_12 = df_feat['Close'].ewm(span=12).mean()
+    ema_26 = df_feat['Close'].ewm(span=26).mean()
+    df_feat['MACD'] = ema_12 - ema_26
+    df_feat['MACD_signal'] = df_feat['MACD'].ewm(span=9).mean()
+    df_feat['MACD_hist'] = df_feat['MACD'] - df_feat['MACD_signal']
+    
+    # Momentum
+    df_feat['momentum_1w'] = df_feat['Close'] / df_feat['Close'].shift(7) - 1
+    df_feat['momentum_1m'] = df_feat['Close'] / df_feat['Close'].shift(30) - 1
+    
     return df_feat.dropna()
 
 def resample_market_to_weekly(df, date_col='Date'):
     if date_col in df.columns:
+        # Đồng bộ timezone tại bước resample
         df[date_col] = pd.to_datetime(df[date_col], utc=True) 
         df = df.set_index(date_col)
         
@@ -72,7 +96,18 @@ def resample_market_to_weekly(df, date_col='Date'):
         'Close': 'last',
         'Volume': 'sum',
         'RSI_14': 'last',         
-        'volatility_20d': 'mean'   
+        'volatility_20d': 'mean',
+        'SMA_20': 'last',
+        'SMA_50': 'last',
+        'EMA_20': 'last',
+        'BB_middle': 'last',
+        'BB_upper': 'last',
+        'BB_lower': 'last',
+        'MACD': 'last',
+        'MACD_signal': 'last',
+        'MACD_hist': 'last',
+        'momentum_1w': 'last',
+        'momentum_1m': 'last'
     }
     
     agg_dict = {k: v for k, v in ohlcv_dict.items() if k in df.columns}
@@ -81,23 +116,30 @@ def resample_market_to_weekly(df, date_col='Date'):
     
     return weekly_df.reset_index()
 
-# === CHẠY THỬ PIPELINE ===
-print("Đang xử lý dữ liệu Cà Phê...")
-coffee_df = pd.read_csv(coffee_input)
-coffee_df = clean_raw_market_data(coffee_df)
-coffee_df, kc_c = apply_acu_filter(coffee_df, 'Close', 0.06)
-coffee_df, kc_h = apply_acu_filter(coffee_df, 'High', 0.06)
-coffee_df, kc_l = apply_acu_filter(coffee_df, 'Low', 0.06)
-coffee_weekly = resample_market_to_weekly(calculate_financial_features(coffee_df))
-coffee_weekly.to_csv(coffee_output, index=False)
-print(f"-> Hoàn tất! Đã lưu tại: {coffee_output}")
+if __name__ == "__main__":
+    # === CHẠY THỬ PIPELINE ===
+    print("Đang xử lý dữ liệu Cà Phê...")
+    if os.path.exists(coffee_input):
+        coffee_df = pd.read_csv(coffee_input)
+        coffee_df = clean_raw_market_data(coffee_df)
+        coffee_df, kc_c = apply_acu_filter(coffee_df, 'Close', 0.06)
+        coffee_df, kc_h = apply_acu_filter(coffee_df, 'High', 0.06)
+        coffee_df, kc_l = apply_acu_filter(coffee_df, 'Low', 0.06)
+        coffee_weekly = resample_market_to_weekly(calculate_financial_features(coffee_df))
+        coffee_weekly.to_csv(coffee_output, index=False)
+        print(f"-> Hoàn tất! Đã lưu tại: {coffee_output}")
+    else:
+        print(f"Không tìm thấy file: {coffee_input}")
 
-print("\nĐang xử lý dữ liệu Bắp (Ngô)...")
-corn_df = pd.read_csv(corn_input)
-corn_df = clean_raw_market_data(corn_df)
-corn_df, zc_c = apply_acu_filter(corn_df, 'Close', 0.05)
-corn_df, zc_h = apply_acu_filter(corn_df, 'High', 0.05)
-corn_df, zc_l = apply_acu_filter(corn_df, 'Low', 0.05)
-corn_weekly = resample_market_to_weekly(calculate_financial_features(corn_df))
-corn_weekly.to_csv(corn_output, index=False)
-print(f"-> Hoàn tất! Đã lưu tại: {corn_output}")
+    print("\nĐang xử lý dữ liệu Bắp (Ngô)...")
+    if os.path.exists(corn_input):
+        corn_df = pd.read_csv(corn_input)
+        corn_df = clean_raw_market_data(corn_df)
+        corn_df, zc_c = apply_acu_filter(corn_df, 'Close', 0.05)
+        corn_df, zc_h = apply_acu_filter(corn_df, 'High', 0.05)
+        corn_df, zc_l = apply_acu_filter(corn_df, 'Low', 0.05)
+        corn_weekly = resample_market_to_weekly(calculate_financial_features(corn_df))
+        corn_weekly.to_csv(corn_output, index=False)
+        print(f"-> Hoàn tất! Đã lưu tại: {corn_output}")
+    else:
+        print(f"Không tìm thấy file: {corn_input}")
