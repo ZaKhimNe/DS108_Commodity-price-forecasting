@@ -1,0 +1,127 @@
+version: "3.9"
+
+# Shared base config — all pipeline services inherit this
+x-pipeline-base: &pipeline-base
+  build: .
+  volumes:
+    - ./data:/app/data       # raw → preprocessed → integrated → tensors
+    - ./models:/app/models   # trained model artifacts
+    - ./logs:/app/logs       # training logs
+  environment:
+    - PYTHONUNBUFFERED=1
+
+services:
+
+  # ── Stage 1: Raw data ingestion (modules 01–04) ────────────────────────────
+  # Pulls market, weather, macro, farming data from external APIs
+  # Runtime: ~5–10 min (network-bound)
+  ingest:
+    <<: *pipeline-base
+    command: >
+      bash -c "
+        python src/ingestion/01_market_ingestion.py &&
+        python src/ingestion/02_weather_ingestion.py &&
+        python src/ingestion/03_macro_ingestion.py &&
+        python src/ingestion/04_farming_ingestion.py
+      "
+
+  # ── Stage 2: Preprocessing (modules 05–12) ────────────────────────────────
+  # Anomaly removal, feature engineering, integration, CCF lag analysis
+  # Requires: data/raw/ from stage ingest
+  # Runtime: ~3–5 min
+  preproc:
+    <<: *pipeline-base
+    command: >
+      bash -c "
+        python src/preprocessing/05_weather_anomaly_removal.py &&
+        python src/preprocessing/06_weather_preprocessing.py &&
+        python src/preprocessing/07_weather_weekly_aggregation.py &&
+        python src/preprocessing/08_market_acu_filter.py &&
+        python src/preprocessing/09_macro_preprocessing.py &&
+        python src/preprocessing/10_farming_preprocessing.py &&
+        python src/11_data_integration.py &&
+        python src/12_lag_analysis.py
+      "
+
+  # ── Stage 3: Tensor packing (modules 13/b/c) ──────────────────────────────
+  # 70/10/20 split + embargo + null-importance feature selection + 3D tensors
+  # Requires: data/integrated/ from stage preproc
+  # Runtime: ~2–3 min
+  tensors:
+    <<: *pipeline-base
+    command: >
+      bash -c "
+        python src/13_tensor_packing.py &&
+        python src/13b_tensor_packing_mc.py &&
+        python src/13c_tensor_packing_reg.py
+      "
+
+  # ── Stage 4: Modeling — binary + multiclass (modules 14–21) ───────────────
+  # LightGBM, RF, LSTM, TCN, Stacking, Backtesting, Walkforward evaluation
+  # Requires: data/tensors/ from stage tensors
+  # Runtime: ~60–120 min (LSTM/TCN training is CPU-bound)
+  model:
+    <<: *pipeline-base
+    command: >
+      bash -c "
+        python src/modeling/14_lgbm_baseline.py &&
+        python src/modeling/15_rf_baseline.py &&
+        python src/modeling/16_lstm_hybrid.py &&
+        python src/modeling/17_tcn_hybrid.py &&
+        python src/modeling/18_stacking_ensemble.py &&
+        python src/modeling/14b_lgbm_multiclass.py &&
+        python src/modeling/15b_rf_multiclass.py &&
+        python src/modeling/16b_lstm_multiclass.py &&
+        python src/modeling/17b_tcn_multiclass.py &&
+        python src/modeling/18b_stacking_multiclass.py &&
+        python src/modeling/19_backtesting_engine.py &&
+        python src/modeling/19b_backtesting_mc.py &&
+        python src/modeling/21_walkforward_eval.py
+      "
+
+  # ── Stage 5: Hurdle model (module 22) ─────────────────────────────────────
+  # Two-stage zero-inflation regression: classification + pos/neg regression legs
+  # Requires: models/18b_stacking_mc/ from stage model
+  # Runtime: ~5–10 min
+  hurdle:
+    <<: *pipeline-base
+    command: python src/modeling/22_hurdle_model.py
+
+  # ── Full pipeline: all stages + report (modules 01–22 + 20) ───────────────
+  # Runs everything end-to-end. Use this for a complete fresh run.
+  # Runtime: ~2–4 hours total
+  full:
+    <<: *pipeline-base
+    command: >
+      bash -c "
+        python src/ingestion/01_market_ingestion.py &&
+        python src/ingestion/02_weather_ingestion.py &&
+        python src/ingestion/03_macro_ingestion.py &&
+        python src/ingestion/04_farming_ingestion.py &&
+        python src/preprocessing/05_weather_anomaly_removal.py &&
+        python src/preprocessing/06_weather_preprocessing.py &&
+        python src/preprocessing/07_weather_weekly_aggregation.py &&
+        python src/preprocessing/08_market_acu_filter.py &&
+        python src/preprocessing/09_macro_preprocessing.py &&
+        python src/preprocessing/10_farming_preprocessing.py &&
+        python src/11_data_integration.py &&
+        python src/12_lag_analysis.py &&
+        python src/13_tensor_packing.py &&
+        python src/13b_tensor_packing_mc.py &&
+        python src/13c_tensor_packing_reg.py &&
+        python src/modeling/14_lgbm_baseline.py &&
+        python src/modeling/15_rf_baseline.py &&
+        python src/modeling/16_lstm_hybrid.py &&
+        python src/modeling/17_tcn_hybrid.py &&
+        python src/modeling/18_stacking_ensemble.py &&
+        python src/modeling/14b_lgbm_multiclass.py &&
+        python src/modeling/15b_rf_multiclass.py &&
+        python src/modeling/16b_lstm_multiclass.py &&
+        python src/modeling/17b_tcn_multiclass.py &&
+        python src/modeling/18b_stacking_multiclass.py &&
+        python src/modeling/19_backtesting_engine.py &&
+        python src/modeling/19b_backtesting_mc.py &&
+        python src/modeling/21_walkforward_eval.py &&
+        python src/modeling/22_hurdle_model.py &&
+        python src/20_pipeline_report.py
+      "
