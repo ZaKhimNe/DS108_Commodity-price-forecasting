@@ -38,8 +38,14 @@ log = logging.getLogger(__name__)
 with open("config/llm_farming_config.json") as f:
     CFG = json.load(f)
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-USDA_API_KEY      = os.getenv("USDA_NASS_API_KEY", "")
+# Proxy 1gw.gwai.cloud dùng Authorization: Bearer (ANTHROPIC_AUTH_TOKEN)
+# Official Anthropic dùng x-api-key (ANTHROPIC_API_KEY)
+# Script tự detect cái nào được set
+ANTHROPIC_AUTH_TOKEN = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+ANTHROPIC_API_KEY    = os.getenv("ANTHROPIC_API_KEY", "")
+_LLM_KEY             = ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY
+ANTHROPIC_BASE_URL   = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+USDA_API_KEY         = os.getenv("USDA_NASS_API_KEY", "")
 
 START_YEAR = CFG.get("start_year", 2010)
 END_YEAR   = CFG.get("end_year",   2026)
@@ -249,20 +255,65 @@ class LLMExtractor:
     """Calls Claude API to extract structured JSON from agricultural report text."""
 
     def __init__(self) -> None:
-        if not ANTHROPIC_API_KEY:
-            raise EnvironmentError("ANTHROPIC_API_KEY not set. Add it to .env")
+        if not _LLM_KEY:
+            raise EnvironmentError(
+                "No API key found. Set ANTHROPIC_AUTH_TOKEN (proxy) "
+                "or ANTHROPIC_API_KEY (official) in .env"
+            )
         import anthropic as _anthropic
-        self.client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        if ANTHROPIC_AUTH_TOKEN:
+            self._headers = {
+                "Authorization": f"Bearer {ANTHROPIC_AUTH_TOKEN}",
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            }
+            log.info("LLM auth: Bearer token | endpoint: %s", ANTHROPIC_BASE_URL)
+        else:
+            self._headers = {
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            }
+            log.info("LLM auth: x-api-key | endpoint: %s", ANTHROPIC_BASE_URL)
+        # Keep SDK client as fallback reference (not used for actual calls)
+        self.client = None
 
     def _call(self, system: str, user: str) -> str:
-        resp = self.client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            messages=[{"role": "user", "content": user}],
-            system=system,
+        resp = requests.post(
+            f"{ANTHROPIC_BASE_URL}/v1/messages",
+            headers=self._headers,
+            json={
+                "model": MODEL,
+                "max_tokens": MAX_TOKENS,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+            },
+            timeout=60,
         )
+
+        # Rate limit: wait even on success to avoid hammering proxy
         time.sleep(RATE_SLEEP)
-        return resp.content[0].text.strip()
+
+        if resp.status_code == 429:
+            retry_after = int(resp.headers.get("retry-after", 30))
+            log.info("429 rate limit — sleeping %ds", retry_after)
+            time.sleep(retry_after)
+            raise RuntimeError(f"Rate limited (429)")
+
+        resp.raise_for_status()
+
+        body = resp.text.strip()
+        if not body:
+            raise RuntimeError("Empty response from API")
+
+        data = resp.json()
+        # Handle both Anthropic format {"content":[{"text":"..."}]} and
+        # proxy-specific format {"choices":[{"message":{"content":"..."}}]}
+        if "content" in data and data["content"]:
+            return data["content"][0].get("text", "").strip()
+        if "choices" in data and data["choices"]:
+            return data["choices"][0].get("message", {}).get("content", "").strip()
+        raise RuntimeError(f"Unexpected response format: {str(data)[:100]}")
 
     def extract_corn(self, text: str, report_date: str) -> Optional[CornReportData]:
         user = CORN_USER_TEMPLATE.format(
@@ -967,14 +1018,14 @@ def run_llm_pipeline(use_llm: bool = True, use_cache: bool = True) -> None:
     # ── Coffee: CONAB + LLM ────────────────────────────────────────────────
     log.info("=== Stage 2: CONAB coffee reports ===")
     llm = None
-    if use_llm and ANTHROPIC_API_KEY:
+    if use_llm and _LLM_KEY:
         try:
             llm = LLMExtractor()
             log.info("Claude API initialized: model=%s", MODEL)
         except Exception as e:
             log.error("LLM init failed: %s", e)
     else:
-        log.warning("ANTHROPIC_API_KEY not set — coffee LLM extraction skipped")
+        log.warning("No LLM key found (set ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY)")
 
     coffee_reports = fetch_conab_coffee(llm=llm, use_cache=use_cache)
 
