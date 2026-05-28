@@ -3,8 +3,20 @@ import requests, os, json
 from dotenv import load_dotenv
 load_dotenv()
 
-token    = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
-base_url = os.getenv("ANTHROPIC_BASE_URL", "")
+auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+api_key    = os.getenv("ANTHROPIC_API_KEY", "")
+base_url   = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+
+with open("config/llm_farming_config.json") as f:
+    model = json.load(f)["model"]
+
+if auth_token:
+    headers_auth = {"Authorization": f"Bearer {auth_token}"}
+    print(f"Auth: Bearer (proxy) | endpoint: {base_url}")
+else:
+    headers_auth = {"x-api-key": api_key}
+    print(f"Auth: x-api-key (official) | endpoint: {base_url}")
+print(f"Model: {model}")
 
 prompt = (
     "Brazil Coffee 2023: Production 54.94M bags, Arabica 38.2M (70%), "
@@ -16,9 +28,9 @@ prompt = (
 
 r = requests.post(
     f"{base_url}/v1/messages",
-    headers={"Authorization": f"Bearer {token}", "anthropic-version": "2023-06-01",
+    headers={**headers_auth, "anthropic-version": "2023-06-01",
              "content-type": "application/json"},
-    json={"model": "claude-haiku-4-5", "max_tokens": 80,
+    json={"model": model, "max_tokens": 80,
           "messages": [{"role": "user", "content": prompt}]},
     timeout=30,
 )

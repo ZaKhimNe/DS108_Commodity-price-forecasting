@@ -307,13 +307,17 @@ class LLMExtractor:
             raise RuntimeError("Empty response from API")
 
         data = resp.json()
-        # Handle both Anthropic format {"content":[{"text":"..."}]} and
-        # proxy-specific format {"choices":[{"message":{"content":"..."}}]}
         if "content" in data and data["content"]:
-            return data["content"][0].get("text", "").strip()
-        if "choices" in data and data["choices"]:
-            return data["choices"][0].get("message", {}).get("content", "").strip()
-        raise RuntimeError(f"Unexpected response format: {str(data)[:100]}")
+            text = data["content"][0].get("text", "").strip()
+        elif "choices" in data and data["choices"]:
+            text = data["choices"][0].get("message", {}).get("content", "").strip()
+        else:
+            raise RuntimeError(f"Unexpected response format: {str(data)[:100]}")
+
+        # Strip markdown code fences if model wrapped JSON in ```json ... ```
+        import re as _re
+        text = _re.sub(r"^```(?:json)?\s*", "", text).rstrip("` \n")
+        return text
 
     def extract_corn(self, text: str, report_date: str) -> Optional[CornReportData]:
         user = CORN_USER_TEMPLATE.format(
@@ -727,25 +731,16 @@ def fetch_conab_coffee(llm: Optional["LLMExtractor"] = None,
 # PSD Fallback — USDA PSD coffee Brazil (annual) + LLM signal classification
 # ══════════════════════════════════════════════════════════════════════════════
 
-_PSD_SIGNAL_SYSTEM = """You are an agricultural commodity analyst specializing in Brazilian coffee markets.
-Given annual Brazil coffee production statistics from the USDA PSD database, classify the market signal.
+_PSD_SIGNAL_SYSTEM = (
+    "Classify Brazil coffee market signal. "
+    'Reply ONLY JSON: {"signal":"<value>","signal_reasoning":"<max 15 words>"}. '
+    "signal values: bumper_crop_bullish, above_average, on_track, below_average, crop_stress_bearish, severe_stress_very_bearish"
+)
 
-Return ONLY a JSON object with exactly two fields:
-- "signal": one of "bumper_crop_bullish", "above_average", "on_track", "below_average", "crop_stress_bearish", "severe_stress_very_bearish"
-- "signal_reasoning": max 20 words explaining the signal
-
-No explanation, no markdown — ONLY the JSON object."""
-
-_PSD_SIGNAL_USER = """Brazil Coffee Production Statistics — {year}:
-- Total Production: {production:.2f} million 60-kg bags
-- Arabica: {arabica:.2f} million bags ({arabica_pct:.0f}% of total)
-- Robusta: {robusta:.2f} million bags ({robusta_pct:.0f}% of total)
-- Production change vs prior year: {change:+.1f}%
-- Bean Exports: {exports:.2f} million bags
-- Ending Stocks: {stocks:.2f} million bags
-- Stock-to-use ratio: {stu:.1f}%
-
-Classify the market signal for coffee price direction."""
+_PSD_SIGNAL_USER = (
+    "Brazil coffee {year}: prod={production:.1f}M bags, YoY={change:+.0f}%, "
+    "exports={exports:.1f}M, stocks={stocks:.1f}M, stu={stu:.1f}%"
+)
 
 
 def fetch_coffee_from_psd(
