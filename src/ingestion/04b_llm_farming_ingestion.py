@@ -591,7 +591,7 @@ def _scrape_conab_report_urls() -> list[dict]:
         with urllib.request.urlopen(req, timeout=15) as r:
             html = r.read().decode("utf-8", errors="replace")
         parser = PDFLinkParser()
-        parser.parse(html)
+        parser.feed(html)
         if parser.links:
             log.info("Found %d CONAB PDF links on page", len(parser.links))
             # Match links to dates (newest first on CONAB page)
