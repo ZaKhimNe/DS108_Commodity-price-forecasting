@@ -1,0 +1,13 @@
+dataset,experiment,test_auc,test_prauc,test_f1
+coffee_daily,A_synthetic,0.4048,0.3472,0.5609
+coffee_daily,B_llm_only,0.3771,0.316,0.5605
+coffee_daily,C_hybrid,0.4122,0.3404,0.5609
+coffee_weekly,A_synthetic,0.4042,0.3054,0.4643
+coffee_weekly,B_llm_only,0.4911,0.327,0.4974
+coffee_weekly,C_hybrid,0.4072,0.2819,0.4541
+corn_daily,A_synthetic,0.4752,0.2477,0.3026
+corn_daily,B_llm_only,0.4912,0.2618,0.3475
+corn_daily,C_hybrid,0.4866,0.2538,0.2995
+corn_weekly,A_synthetic,0.5979,0.3106,0.4181
+corn_weekly,B_llm_only,0.5476,0.3025,0.4181
+corn_weekly,C_hybrid,0.5261,0.2652,0.4181
