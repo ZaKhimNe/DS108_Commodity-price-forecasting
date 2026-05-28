@@ -18,6 +18,11 @@ models/**/results_*.json
 models/**/feature_cols_*.json
 models/**/importance_*.csv
 
+# Secrets — NEVER commit
+.env
+*.env
+*.env.local
+
 # Runtime cache
 .cache.sqlite
 *.db
