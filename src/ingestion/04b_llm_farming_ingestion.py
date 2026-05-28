@@ -673,6 +673,158 @@ def fetch_conab_coffee(llm: Optional["LLMExtractor"] = None,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# PSD Fallback — USDA PSD coffee Brazil (annual) + LLM signal classification
+# ══════════════════════════════════════════════════════════════════════════════
+
+_PSD_SIGNAL_SYSTEM = """You are an agricultural commodity analyst specializing in Brazilian coffee markets.
+Given annual Brazil coffee production statistics from the USDA PSD database, classify the market signal.
+
+Return ONLY a JSON object with exactly two fields:
+- "signal": one of "bumper_crop_bullish", "above_average", "on_track", "below_average", "crop_stress_bearish", "severe_stress_very_bearish"
+- "signal_reasoning": max 20 words explaining the signal
+
+No explanation, no markdown — ONLY the JSON object."""
+
+_PSD_SIGNAL_USER = """Brazil Coffee Production Statistics — {year}:
+- Total Production: {production:.2f} million 60-kg bags
+- Arabica: {arabica:.2f} million bags ({arabica_pct:.0f}% of total)
+- Robusta: {robusta:.2f} million bags ({robusta_pct:.0f}% of total)
+- Production change vs prior year: {change:+.1f}%
+- Bean Exports: {exports:.2f} million bags
+- Ending Stocks: {stocks:.2f} million bags
+- Stock-to-use ratio: {stu:.1f}%
+
+Classify the market signal for coffee price direction."""
+
+
+def fetch_coffee_from_psd(
+    psd_path: str | Path = "data/psd_coffee_brazil.csv",
+    llm: Optional["LLMExtractor"] = None,
+    use_cache: bool = True,
+) -> list[CoffeeReportData]:
+    """
+    Parse USDA PSD coffee Brazil data and use LLM to classify annual market signal.
+
+    This is the fallback when CONAB PDFs are unavailable. Demonstrates LLM use on
+    structured production statistics — Claude classifies signal + reasoning per year.
+
+    Args:
+        psd_path: path to filtered coffee+Brazil PSD CSV (run psd filter first)
+        llm:      LLMExtractor instance (Claude API)
+        use_cache: skip years already cached in conab_reports/llm_*.json
+
+    Returns:
+        list of CoffeeReportData (one per year, report_type='PSD_annual')
+    """
+    psd_path = Path(psd_path)
+    if not psd_path.exists():
+        log.warning("PSD coffee Brazil file not found: %s", psd_path)
+        return []
+
+    df = pd.read_csv(psd_path)
+    df.columns = [c.strip() for c in df.columns]
+
+    # Unit is "1000 60 KG BAGS" → divide by 1000 → million 60-kg bags
+    def _attr(attr_name: str) -> pd.Series:
+        mask = df["Attribute_Description"].str.strip() == attr_name
+        s = df[mask][["Market_Year", "Value"]].drop_duplicates("Market_Year")
+        s = s.set_index("Market_Year")["Value"] / 1000.0
+        return s
+
+    prod     = _attr("Production")
+    arabica  = _attr("Arabica Production")
+    robusta  = _attr("Robusta Production")
+    exports  = _attr("Bean Exports")
+    e_stocks = _attr("Ending Stocks")
+    supply   = _attr("Total Supply")
+
+    years = sorted(prod.index)
+    reports: list[CoffeeReportData] = []
+
+    log.info("Processing %d years of PSD coffee Brazil data ...", len(years))
+    for year in years:
+        if year < START_YEAR or year > END_YEAR:
+            continue
+
+        report_date = f"{year}-07-01"  # mid-year estimate
+
+        p      = float(prod.get(year, 0) or 0)
+        a      = float(arabica.get(year, 0) or 0)
+        r_     = float(robusta.get(year, 0) or 0)
+        ex     = float(exports.get(year, 0) or 0)
+        es     = float(e_stocks.get(year, 0) or 0)
+        sup    = float(supply.get(year, 0) or 0)
+        p_prev = float(prod.get(year - 1, 0) or 0)
+
+        change    = ((p - p_prev) / p_prev * 100) if p_prev > 0 else 0.0
+        arab_pct  = (a / p * 100) if p > 0 else 0.0
+        rob_pct   = (r_ / p * 100) if p > 0 else 0.0
+        stu       = (es / sup * 100) if sup > 0 else 0.0
+
+        # LLM signal classification
+        signal = "on_track"
+        reasoning = ""
+        if llm is not None and p > 0:
+            cache_path = CONAB_DIR / f"llm_{report_date}_psd.json"
+            if use_cache and cache_path.exists():
+                try:
+                    cached = json.loads(cache_path.read_text())
+                    signal    = cached.get("signal", "on_track")
+                    reasoning = cached.get("signal_reasoning", "")
+                except Exception:
+                    pass
+            else:
+                prompt = _PSD_SIGNAL_USER.format(
+                    year=year, production=p, arabica=a, arabica_pct=arab_pct,
+                    robusta=r_, robusta_pct=rob_pct, change=change,
+                    exports=ex, stocks=es, stu=stu,
+                )
+                try:
+                    raw = llm._call(_PSD_SIGNAL_SYSTEM, prompt)
+                    cache_path.write_text(raw)
+                    parsed = json.loads(raw)
+                    signal    = parsed.get("signal", "on_track")
+                    reasoning = parsed.get("signal_reasoning", "")
+                    log.info("  ✓ PSD coffee %d: signal=%s", year, signal)
+                except Exception as e:
+                    log.warning("  LLM signal failed for %d: %s", year, e)
+        else:
+            # Rule-based fallback when no LLM
+            if change >= 10:   signal = "bumper_crop_bullish"
+            elif change >= 3:  signal = "above_average"
+            elif change <= -10: signal = "crop_stress_bearish"
+            elif change <= -3:  signal = "below_average"
+            reasoning = f"Production {change:+.1f}% YoY; stock-to-use {stu:.1f}%"
+
+        nat = CoffeeNationalData(
+            stage=None,
+            harvest_completion_pct=None,
+            production_forecast_million_bags=round(p, 3),
+            production_change_vs_last_year_pct=round(change, 2),
+            arabica_pct=int(arab_pct) if arab_pct else None,
+            robusta_pct=int(rob_pct) if rob_pct else None,
+            overall_condition=None,
+        )
+        regions = {k: CoffeeRegionData() for k in
+                   ["sul_de_minas", "cerrado_mineiro", "matas_de_minas",
+                    "mogiana", "cerrado_baiano"]}
+
+        report = CoffeeReportData(
+            report_date=report_date,
+            report_type="PSD_annual",
+            national=nat,
+            regions=regions,
+            weather_events=[],
+            signal=signal,
+            signal_reasoning=reasoning,
+        )
+        reports.append(report)
+
+    log.info("PSD: built %d annual coffee reports (LLM=%s)", len(reports), llm is not None)
+    return reports
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Feature Builders
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -825,13 +977,32 @@ def run_llm_pipeline(use_llm: bool = True, use_cache: bool = True) -> None:
         log.warning("ANTHROPIC_API_KEY not set — coffee LLM extraction skipped")
 
     coffee_reports = fetch_conab_coffee(llm=llm, use_cache=use_cache)
+
+    # Fallback: USDA PSD coffee Brazil data (always available, no scraping needed)
+    if not coffee_reports:
+        log.info("CONAB unavailable — falling back to USDA PSD coffee Brazil data")
+        psd_path = Path("data/psd_coffee_brazil.csv")
+        if not psd_path.exists():
+            # Auto-generate from psd_alldata.csv if available
+            alldata = Path("psd_alldata.csv")
+            if alldata.exists():
+                log.info("Generating psd_coffee_brazil.csv from psd_alldata.csv ...")
+                raw_psd = pd.read_csv(alldata, dtype=str)
+                mask = (
+                    raw_psd["Commodity_Description"].str.contains("Coffee", case=False, na=False) &
+                    raw_psd["Country_Name"].str.contains("Brazil", case=False, na=False)
+                )
+                raw_psd[mask].to_csv(psd_path, index=False)
+                log.info("Saved %d rows → %s", mask.sum(), psd_path)
+        coffee_reports = fetch_coffee_from_psd(psd_path=psd_path, llm=llm, use_cache=use_cache)
+
     if coffee_reports:
         coffee_daily = build_coffee_features(coffee_reports)
         coffee_out = LLM_DIR / "coffee_monthly_llm.csv"
         coffee_daily.to_csv(coffee_out)
         log.info("Coffee features saved → %s (%d rows)", coffee_out, len(coffee_daily))
     else:
-        log.warning("No coffee reports extracted — run after setting ANTHROPIC_API_KEY")
+        log.warning("No coffee data available — check psd_alldata.csv or CONAB connectivity")
 
     log.info("=== 04b complete: outputs in %s ===", LLM_DIR)
 
