@@ -1,0 +1,23 @@
+{
+  "start_year": 2010,
+  "end_year": 2026,
+  "model": "claude-haiku-4-5-20251001",
+  "max_tokens": 1024,
+  "rate_sleep_seconds": 1.2,
+  "usda": {
+    "base_url": "https://quickstats.nass.usda.gov/api/api_GET/",
+    "states": ["IOWA", "ILLINOIS", "INDIANA", "MINNESOTA", "NEBRASKA", "US TOTAL"],
+    "commodity": "CORN",
+    "freq": "WEEKLY"
+  },
+  "conab": {
+    "page_url": "https://www.conab.gov.br/info-agro/safras/cafe/boletim-da-safra-de-cafe",
+    "report_months": [1, 4, 7, 10],
+    "max_pdf_pages": 6
+  },
+  "ablation": {
+    "experiment_a_tag": "synthetic_only",
+    "experiment_b_tag": "llm_only",
+    "experiment_c_tag": "hybrid"
+  }
+}

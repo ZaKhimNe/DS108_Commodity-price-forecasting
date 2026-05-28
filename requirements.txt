@@ -23,3 +23,9 @@ matplotlib>=3.7.0
 # ── Utilities ───────────────────────────────────────────────
 tqdm>=4.65.0
 python-dotenv>=1.0.0
+requests>=2.31.0
+
+# ── LLM integration (module 04b) ────────────────────────────
+anthropic>=0.40.0
+pdfplumber>=0.11.0
+pydantic>=2.0.0
