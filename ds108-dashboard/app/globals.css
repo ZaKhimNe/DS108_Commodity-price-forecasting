@@ -124,9 +124,36 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Default font: Inter */
   html {
-    @apply font-sans;
+    font-family: var(--font-inter), system-ui, sans-serif;
   }
+  /* Font switching via data-font attribute */
+  html[data-font="outfit"]   { font-family: var(--font-outfit),   system-ui, sans-serif; }
+  html[data-font="ibm-plex"] { font-family: var(--font-ibm-plex), system-ui, sans-serif; }
+  html[data-font="dm-sans"]  { font-family: var(--font-dm-sans),  system-ui, sans-serif; }
+  /* Mono font for tables/numbers */
+  .font-mono { font-family: var(--font-mono), ui-monospace, monospace; }
+}
+
+/* ── Density system ────────────────────────────────────────────────────── */
+:root {
+  --density-py: 16px;
+  --density-px: 18px;
+  --density-gap: 14px;
+  --row-h: 40px;
+}
+[data-density="compact"] {
+  --density-py: 10px;
+  --density-px: 12px;
+  --density-gap: 10px;
+  --row-h: 32px;
+}
+[data-density="comfy"] {
+  --density-py: 22px;
+  --density-px: 24px;
+  --density-gap: 20px;
+  --row-h: 48px;
 }
 
 /* DS108 custom theming vars — light */
