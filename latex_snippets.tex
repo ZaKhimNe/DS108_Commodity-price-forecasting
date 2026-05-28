@@ -1,0 +1,54 @@
+% DS108 Ablation Study — AUC-ROC values (LGBM baseline, generated 2026-05-28)
+%
+% Experimental conditions:
+%   00_baseline      : train-only scaler, embargo gap = horizon rows, rolling causal (min_periods=1)
+%   01_global_scaler : MinMaxScaler fit on all data (train+val+test) — data snooping
+%                      NOTE: LGBM is scale-invariant → Delta AUC ≈ 0 by design (expected)
+%   02_no_embargo    : embargo gap removed at train/val and val/test boundaries
+%                      NOTE: walkforward daily sets unaffected; weekly sets show small +0.03 lift
+%   03_center_rolling: center=True on all rolling windows — look-ahead bias (future values used)
+%                      Large AUC inflation: coffee_daily +0.248, coffee_weekly +0.419,
+%                      corn_daily +0.231, corn_weekly +0.198
+
+% ── Baseline AUC (Exp 00) ────────────────────────────────────────────────────
+\newcommand{\ablCoffeeDailyBaseline}{0.405}
+\newcommand{\ablCoffeeWeeklyBaseline}{0.404}
+\newcommand{\ablCornDailyBaseline}{0.475}
+\newcommand{\ablCornWeeklyBaseline}{0.598}
+
+% ── Global Scaler AUC (Exp 01) — scale-invariant trees, Delta ≈ 0 ────────────
+\newcommand{\ablCoffeeDailyGlobalScaler}{0.405}
+\newcommand{\ablCoffeeWeeklyGlobalScaler}{0.407}
+\newcommand{\ablCornDailyGlobalScaler}{0.475}
+\newcommand{\ablCornWeeklyGlobalScaler}{0.598}
+
+% ── No Embargo AUC (Exp 02) ──────────────────────────────────────────────────
+\newcommand{\ablCoffeeDailyNoEmbargo}{0.405}
+\newcommand{\ablCoffeeWeeklyNoEmbargo}{0.439}
+\newcommand{\ablCornDailyNoEmbargo}{0.475}
+\newcommand{\ablCornWeeklyNoEmbargo}{0.598}
+
+% ── Center Rolling AUC (Exp 03) — look-ahead bias ────────────────────────────
+\newcommand{\ablCoffeeDailyCenterRolling}{0.653}
+\newcommand{\ablCoffeeWeeklyCenterRolling}{0.823}
+\newcommand{\ablCornDailyCenterRolling}{0.703}
+\newcommand{\ablCornWeeklyCenterRolling}{0.796}
+
+% ── Delta AUC vs Baseline (Exp 03 − Exp 00) ──────────────────────────────────
+\newcommand{\ablCoffeeDailyCenterDelta}{+0.248}
+\newcommand{\ablCoffeeWeeklyCenterDelta}{+0.419}
+\newcommand{\ablCornDailyCenterDelta}{+0.228}
+\newcommand{\ablCornWeeklyCenterDelta}{+0.198}
+
+% ── Summary table (copy-paste ready) ─────────────────────────────────────────
+%
+% \begin{tabular}{lcccc}
+% \toprule
+% Experiment & Coffee-D & Coffee-W & Corn-D & Corn-W \\
+% \midrule
+% Baseline (correct)        & \ablCoffeeDailyBaseline & \ablCoffeeWeeklyBaseline & \ablCornDailyBaseline & \ablCornWeeklyBaseline \\
+% + Global scaler (Exp 01)  & \ablCoffeeDailyGlobalScaler & \ablCoffeeWeeklyGlobalScaler & \ablCornDailyGlobalScaler & \ablCornWeeklyGlobalScaler \\
+% + No embargo (Exp 02)     & \ablCoffeeDailyNoEmbargo & \ablCoffeeWeeklyNoEmbargo & \ablCornDailyNoEmbargo & \ablCornWeeklyNoEmbargo \\
+% + center=True (Exp 03)    & \ablCoffeeDailyCenterRolling & \ablCoffeeWeeklyCenterRolling & \ablCornDailyCenterRolling & \ablCornWeeklyCenterRolling \\
+% \bottomrule
+% \end{tabular}

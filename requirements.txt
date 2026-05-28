@@ -1,0 +1,25 @@
+# ── Core data ───────────────────────────────────────────────
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# ── Market & Weather APIs ───────────────────────────────────
+yfinance>=0.2.18
+openmeteo-requests>=1.1.0
+requests-cache>=1.0.0
+retry-requests>=2.0.0
+
+# ── Machine Learning ────────────────────────────────────────
+scikit-learn>=1.3.0
+lightgbm>=4.0.0
+joblib>=1.3.0
+
+# ── Deep Learning ───────────────────────────────────────────
+torch>=2.0.0
+
+# ── Visualization ───────────────────────────────────────────
+matplotlib>=3.7.0
+
+# ── Utilities ───────────────────────────────────────────────
+tqdm>=4.65.0
+python-dotenv>=1.0.0

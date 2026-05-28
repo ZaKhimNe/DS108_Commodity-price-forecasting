@@ -1,0 +1,192 @@
+# DS108 — Agricultural Commodity Price Forecasting
+
+**Multi-source ML pipeline for Coffee (KC=F) and Corn (ZC=F) futures · 2010–2026**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Dataset](https://img.shields.io/badge/Dataset-Kaggle-blue)](https://www.kaggle.com/datasets/khimtagia/agricommodity-futures-multi-source-ml-dataset)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-green)](requirements.txt)
+
+---
+
+## Overview
+
+End-to-end data pipeline and ML modeling system for predicting price movement direction (>2.5% in 7 days) of agricultural commodity futures. Integrates **4 heterogeneous data sources** with strict causal preprocessing — zero data leakage guarantee.
+
+### Key Results
+
+| Metric | Value |
+|--------|-------|
+| AUC-ROC (Coffee Daily LSTM) | 0.709 |
+| Sharpe ratio (Coffee Daily MC Stack) | 2.154 |
+| Alpha vs B&H (Coffee Weekly RF) | **+16.4 pp** |
+| Alpha vs B&H (Corn Daily MC RF L/S) | **+57.4 pp** |
+| Full Hurdle r (Corn Daily) | +0.198 > single r +0.178 |
+| Stage 2b r (Corn negative leg) | **+0.371** (p<0.0001) |
+| Walkforward viability (Coffee) | 3/3 years ✓ |
+
+---
+
+## Architecture
+
+```
+Market (KC=F, ZC=F)    →  ACU filter + RSI/BB/MACD     ─┐
+Weather (Open-Meteo)   →  MIQR + ffill + EWM            ─┤
+Macro  (CPI, VIX, FX)  →  CPI lag fix + VIX resample    ─┼─→ Integration → Null Importances → Tensor → Models
+Farming (Synthetic)    →  Binary flags + sin/cos encode  ─┘
+```
+
+**Models:** LightGBM · Random Forest · LSTM Hybrid · TCN Hybrid · Stacking Ensemble · Two-Stage Hurdle
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone and install
+git clone https://github.com/[your-username]/ds108-agri-pipeline.git
+cd ds108-agri-pipeline
+pip install -r requirements.txt
+
+# 2. Data ingestion (run in order)
+python src/ingestion/01_market_ingestion.py
+python src/ingestion/02_weather_ingestion.py   # ~10 min, rate-limited
+python src/ingestion/03_macro_ingestion.py
+python src/ingestion/04_farming_ingestion.py
+
+# 3. Preprocessing
+python src/preprocessing/05_weather_anomaly_removal.py
+python src/preprocessing/06_weather_preprocessing.py
+python src/preprocessing/07_weather_weekly_aggregation.py
+python src/preprocessing/08_market_acu_filter.py
+python src/preprocessing/09_macro_preprocessing.py
+python src/preprocessing/10_farming_preprocessing.py
+
+# 4. Integration & Feature Engineering
+python src/11_data_integration.py
+python src/12_lag_analysis.py
+
+# 5. Tensor Packing (Binary / Multiclass / Regression)
+python src/13_tensor_packing.py
+python src/13b_tensor_packing_mc.py
+python src/13c_tensor_packing_reg.py
+
+# 6. Modeling
+python src/modeling/14_lgbm_baseline.py
+python src/modeling/15_rf_baseline.py
+python src/modeling/16_lstm_hybrid.py
+python src/modeling/17_tcn_hybrid.py
+python src/modeling/18_stacking.py
+
+# 7. Evaluation
+python src/modeling/19_backtesting_engine.py
+python src/modeling/21_walkforward_eval.py
+python src/modeling/22_hurdle_model.py
+python src/modeling/20_pipeline_report.py
+```
+
+> **Skip ingestion:** Download processed dataset directly from [Kaggle](https://www.kaggle.com/datasets/khimtagia/agricommodity-futures-multi-source-ml-dataset) and place CSVs in `data/integrated/`.
+
+---
+
+## Project Structure
+
+```
+ds108-agri-pipeline/
+├── src/
+│   ├── ingestion/
+│   │   ├── 01_market_ingestion.py
+│   │   ├── 02_weather_ingestion.py
+│   │   ├── 03_macro_ingestion.py
+│   │   └── 04_farming_ingestion.py
+│   ├── preprocessing/
+│   │   ├── 05_weather_anomaly_removal.py  # MIQR + flatline detection
+│   │   ├── 06_weather_preprocessing.py   # ffill + rolling features
+│   │   ├── 07_weather_weekly_aggregation.py
+│   │   ├── 08_market_acu_filter.py       # ACU + RSI/BB/MACD
+│   │   ├── 09_macro_preprocessing.py     # CPI lag fix + VIX
+│   │   └── 10_farming_preprocessing.py
+│   ├── 11_data_integration.py
+│   ├── 12_lag_analysis.py                # CCF bootstrap validation
+│   ├── 13_tensor_packing.py              # 70/10/20 split + embargo
+│   ├── 13b_tensor_packing_mc.py
+│   ├── 13c_tensor_packing_reg.py
+│   └── modeling/
+│       ├── 14_lgbm_baseline.py
+│       ├── 15_rf_baseline.py
+│       ├── 16_lstm_hybrid.py             # LSTM + static features
+│       ├── 17_tcn_hybrid.py              # TCN + static features
+│       ├── 18_stacking.py
+│       ├── 19_backtesting_engine.py
+│       ├── 20_pipeline_report.py
+│       ├── 21_walkforward_eval.py
+│       └── 22_hurdle_model.py            # Two-stage hurdle (full)
+├── config/
+│   └── coordinates.json                  # Weather API coordinates
+├── latex/
+│   ├── latex_snippets.tex
+│   └── hurdle_section.tex
+├── figures/
+│   ├── fig1_pipeline.pdf
+│   ├── fig2_ccf.pdf
+│   ├── fig3_split.pdf
+│   ├── fig4_equity.pdf
+│   └── fig5_hurdle.pdf
+├── reports/
+│   └── PIPELINE_REPORT_hurdle_v2.md
+├── data/
+│   └── .gitkeep                          # empty, real data on Kaggle
+├── models/
+│   └── .gitkeep                          # empty, generated by scripts
+├── requirements.txt
+├── CLAUDE.md
+└── README.md
+```
+
+---
+
+## Data Leakage Prevention
+
+All 11 preprocessing modules are verified leakage-free:
+
+| Module | Operation | Leak? |
+|--------|-----------|-------|
+| MIQR | Rolling Q1/Q3 (`center=False`) | No |
+| Imputation | `ffill()` only | No |
+| CPI | +DateOffset(1mo+12d) before ffill | No |
+| Scaler | `MinMaxScaler.fit(train_only)` | No |
+| Split | 70/10/20 + embargo gap (7 rows) | No |
+
+---
+
+## Two-Stage Hurdle Model (Novel Contribution)
+
+Addresses zero-inflation in return distribution (~34–52% flat zone):
+
+```
+E[return] = P(return > θ) × E[return | return > θ]
+          - P(return < -θ) × E[|return| | return < -θ]
+```
+
+**Corn Daily results:** Stage 2b r=**+0.371** (p<0.0001) — driven by seasonality (`cal_cos_week`), CPI stress, and USD realized volatility. Asymmetry: corn down-moves are more predictable than up-moves.
+
+---
+
+## Dataset
+
+Processed dataset available on Kaggle:  
+**[DS108 AgriCommodity Futures — Multi-Source ML Dataset](https://www.kaggle.com/datasets/khimtagia/agricommodity-futures-multi-source-ml-dataset)**
+
+4 files · ~11.5 MB · CC BY 4.0
+
+---
+
+## Paper
+
+*Hệ Thống Tiền Xử Lý Dữ Liệu Đa Nguồn và Dự Báo Biến Động Giá Hàng Hóa Nông Nghiệp*  
+DS108 Research Group · 2026
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE)

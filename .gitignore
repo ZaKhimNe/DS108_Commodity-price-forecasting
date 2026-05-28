@@ -1,15 +1,59 @@
-# Môi trường ảo
+# Virtual environment
 venv/
+.venv/
+env/
 
-# Thư mục chứa dữ liệu thô và đã xử lý (Tránh đẩy file rác/quá nặng lên Git)
-data/
-!data/.gitkeep
+# Data — raw, intermediate, and tensors (regenerable from ingestion scripts)
+data/raw/
+data/preprocessed/
+data/tensors/
+data/tensors_multiclass*/
+data/tensors_reg*/
 
-# File cache của hệ thống và Python
-.cache
+# Trained model artifacts (regenerable by running pipeline)
+models/**/*.joblib
+models/**/*.pt
+models/**/test_predictions_*.csv
+models/**/results_*.json
+models/**/feature_cols_*.json
+models/**/importance_*.csv
+
+# Runtime cache
 .cache.sqlite
+*.db
+
+# Logs
+logs/
+
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
 
-# Các file cấu hình nhạy cảm (nếu có)
-.env
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code workspace (internal)
+.claude/
+
+# Separate dashboard project — has its own Vercel repo (DS108_DataDashBoard)
+ds108-dashboard/
+DashBoardDs108/
+
+# Internal development artifacts (versioned reports, planning docs)
+PIPELINE_REPORT_v*.md
+PIPELINE_REPORT_ablation*.md
+PIPELINE_REPORT_hurdle*.md
+DS108_Bao_Cao_*.md
+DS108_Ke_Hoach_*.md
+DS108_v*.md
+INVESTIGATION_REPORT.md
+Plan_Integrated*.md
+Plan_Integration*.md
