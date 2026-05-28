@@ -352,10 +352,117 @@ def _signal_from_numbers(planting_vs_avg: Optional[float],
     return "on_track"
 
 
+def parse_usda_downloaded_csv(csv_path: str | Path) -> pd.DataFrame:
+    """
+    Parse a USDA QuickStats CSV export (downloaded manually from
+    https://quickstats.nass.usda.gov) into the same pivot format
+    that fetch_usda_corn() produces via API.
+
+    The CSV must have columns:
+        Week Ending, Geo Level, State, Data Item, Value
+
+    Only columns present in _USDA_MEASURES are kept; missing measure types
+    (e.g. if you only downloaded PCT PLANTED) result in NaN columns — this is
+    expected. Download separate CSV files for each Data Item and merge them,
+    or re-run with all Data Items selected on the QuickStats query builder.
+
+    Args:
+        csv_path: path to the downloaded .csv file (UUID filename is fine)
+
+    Returns:
+        DataFrame with columns [week_ending, state_name, planting_pct, ...]
+        ready to be passed into build_corn_features().
+    """
+    csv_path = Path(csv_path)
+    log.info("Parsing USDA downloaded CSV: %s (%d KB)",
+             csv_path.name, csv_path.stat().st_size // 1024)
+
+    df = pd.read_csv(csv_path, dtype=str)
+
+    # Normalise column names (QuickStats sometimes differs by export version)
+    df.columns = [c.strip().title().replace(" ", "_") for c in df.columns]
+    # Expected after normalisation: Week_Ending, Geo_Level, State, Data_Item, Value
+    col_map = {
+        "Week_Ending": "week_ending",
+        "Geo_Level":   "geo_level",
+        "State":       "state_name",
+        "Data_Item":   "data_item",
+        "Value":       "value_raw",
+    }
+    df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+    required = {"week_ending", "geo_level", "state_name", "data_item", "value_raw"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"CSV missing expected columns: {missing}. "
+                         f"Got: {list(df.columns)}")
+
+    # Parse date
+    df["week_ending"] = pd.to_datetime(df["week_ending"], errors="coerce")
+    df = df.dropna(subset=["week_ending"])
+
+    # Filter to target states + national
+    target = {s.upper() for s in _USDA_STATES}
+    df["state_name"] = df["state_name"].str.upper().str.strip()
+    df = df[df["state_name"].isin(target)].copy()
+
+    # Numeric value — "(D)" means withheld → NaN
+    df["value_int"] = pd.to_numeric(
+        df["value_raw"].str.replace(",", "").str.replace(r"[()D ]", "", regex=True),
+        errors="coerce",
+    )
+
+    # Map Data Item → column name
+    df["data_item"] = df["data_item"].str.strip().str.upper()
+    _measures_upper = {k.upper(): v for k, v in _USDA_MEASURES.items()}
+    df["col"] = df["data_item"].map(_measures_upper)
+    df = df.dropna(subset=["col"])
+
+    if df.empty:
+        log.warning("No matching Data Items found in CSV. "
+                    "Check that 'Data Item' column contains CORN PROGRESS/CONDITION rows.")
+        return pd.DataFrame(columns=["week_ending", "state_name"])
+
+    # Pivot: one row per (week_ending, state_name), one column per measure
+    pivot = df.pivot_table(
+        index=["week_ending", "state_name"],
+        columns="col",
+        values="value_int",
+        aggfunc="first",
+    ).reset_index()
+    pivot.columns.name = None
+
+    # Combine Good + Excellent → condition_ge_pct
+    if "condition_good_pct" in pivot.columns and "condition_excellent_pct" in pivot.columns:
+        pivot["condition_ge_pct"] = (
+            pivot["condition_good_pct"].fillna(0)
+            + pivot["condition_excellent_pct"].fillna(0)
+        )
+    if "condition_poor_pct" in pivot.columns and "condition_very_poor_pct" in pivot.columns:
+        pivot["condition_pvp_pct"] = (
+            pivot["condition_poor_pct"].fillna(0)
+            + pivot["condition_very_poor_pct"].fillna(0)
+        )
+
+    measures_found = [c for c in _USDA_MEASURES.values() if c in pivot.columns]
+    log.info("Parsed %d rows, %d states, measures present: %s",
+             len(pivot), pivot["state_name"].nunique(), measures_found)
+    return pivot
+
+
+# Path where auto-downloaded CSV will be looked up as fallback
+_USDA_CSV_FALLBACK = USDA_DIR / "usda_corn_planting.csv"
+
+
 def fetch_usda_corn(use_cache: bool = True) -> pd.DataFrame:
     """
     Fetch USDA QuickStats corn crop progress data for Illinois, Indiana,
     Iowa, Minnesota, Nebraska + US Total (2010–2026).
+
+    Priority:
+      1. Cache file (usda_corn_raw.csv) — fastest
+      2. Downloaded CSV in data/raw/farming/usda_reports/ — no API key needed
+      3. QuickStats API — requires USDA_NASS_API_KEY in .env
 
     Returns weekly DataFrame with one row per (week_ending, state).
     Columns: planting_pct, emerged_pct, ..., condition_ge_pct, condition_pvp_pct, signal
@@ -366,9 +473,24 @@ def fetch_usda_corn(use_cache: bool = True) -> pd.DataFrame:
         log.info("Loading USDA corn from cache: %s", cache_file)
         return pd.read_csv(cache_file, parse_dates=["week_ending"])
 
+    # Fallback: parse any manually-downloaded USDA CSV
+    downloaded_csvs = sorted(USDA_DIR.glob("usda_corn*.csv")) + \
+                      sorted(USDA_DIR.glob("*.csv"))  # includes UUID-named files
+    downloaded_csvs = [p for p in downloaded_csvs if p != cache_file]
+    if downloaded_csvs:
+        log.info("No API key — using downloaded CSV: %s", downloaded_csvs[0].name)
+        pivot = parse_usda_downloaded_csv(downloaded_csvs[0])
+        pivot.to_csv(cache_file, index=False)
+        log.info("Cached parsed result → %s", cache_file)
+        return pivot
+
     if not USDA_API_KEY:
-        raise EnvironmentError("USDA_NASS_API_KEY not set. Add it to .env. "
-                               "Register free at: https://quickstats.nass.usda.gov/api")
+        raise EnvironmentError(
+            "No USDA data available. Either:\n"
+            "  1. Place a downloaded USDA QuickStats CSV in: data/raw/farming/usda_reports/\n"
+            "     (Download at: https://quickstats.nass.usda.gov — select Corn, Progress)\n"
+            "  2. Or set USDA_NASS_API_KEY in .env"
+        )
 
     log.info("Fetching USDA QuickStats corn progress 2010–2026 ...")
     base_url = "https://quickstats.nass.usda.gov/api/api_GET/"
