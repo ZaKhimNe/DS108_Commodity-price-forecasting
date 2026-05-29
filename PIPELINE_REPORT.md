@@ -114,6 +114,8 @@ Module  │ File                          │ Description
 
 > **Coffee Daily negative alpha context:** The test period 2022–2025 coincides with a KC=F bull run of +203.8% (Brazil drought 2023–2024). A long-only binary strategy cannot capture alpha in strongly trending markets. Coffee Weekly RF alpha of +16.4pp is more reliable due to long+partial position sizing.
 
+> **Signal threshold:** `prob_up > 0.33` to go long (daily); `prob_up > 0.25` (weekly). Weekly models produce narrower probability distributions due to fewer observations — weekly scores rarely exceeded 0.33, causing Coffee Weekly LSTM to generate zero signals (Sharpe=NaN) at the daily threshold. Lowering to 0.25 for weekly resolved this: Coffee Weekly LSTM recovered to Sharpe=1.158, and all weekly models improved across the board.
+
 ---
 
 ## 5. Backtesting — Multiclass Pipeline
@@ -167,6 +169,8 @@ Module  │ File                          │ Description
 | 2025 | −0.436 | −17.2% | 53.6% | 28 |
 
 **2/4 years Sharpe > 0 → MARGINAL** (2022 and 2025 negative — possible regime shift)
+
+> **Note — Walkforward "ALL" vs Full-period Sharpe:** The "ALL" row above is computed over complete calendar-year slices only, and differs slightly from the full-period Sharpe in §4/§5. For Coffee Daily, the test period starts 2022-12-02 but no 2022 calendar-year bucket is created (too few rows) — those Dec 2022 trades are included in full backtesting but excluded from walkforward ALL. For Corn Daily, the 2022 bucket exists but contains only 7 trades (partial year). The resulting gaps: Coffee Daily Stack 1.892 (walkforward ALL) vs 1.839 (§5), Coffee Weekly Stack 0.942 vs 0.889, Corn Daily RF 0.554 vs 0.480. Both figures are correct for their respective scopes — §4/§5 Sharpe covers the full test set, walkforward ALL covers only the year-slice union used for the gate test.
 
 ---
 
@@ -253,13 +257,24 @@ Module `04b_llm_farming_ingestion.py` replaces rule-based binary flags with stru
 
 ### 8.4 Alignment Note
 
-The hurdle model merges stacking predictions (which cover a shorter test window due to LSTM/TCN warm-up) with the full test set using Date inner-join rather than positional slicing:
+Stacking predictions from `18b_stacking_multiclass` are produced via inner-join of 4 base models (LGBM, RF, LSTM, TCN). Because LSTM and TCN require a warm-up window of ~45 days, they cannot generate predictions for the earliest test rows — those rows are dropped from the stacking output. The hurdle model aligns against the full `test_df` using Date inner-join rather than positional slicing:
 
 ```python
 merged = test_df.merge(prob_df[['Date', 'prob_up', 'prob_down']], on='Date', how='inner')
 ```
 
-This ensures correct date alignment regardless of window sizes.
+This guarantees `y_true[i] = prob[i]` regardless of where gaps occur in the stacking output. A positional tail-slice (previous approach) would silently corrupt alignment if gaps existed anywhere other than the start of the sequence.
+
+**Alignment diagnostic (Hurdle Model v3):**
+
+| Dataset | n test_df | n prob_down | n aligned | Rows dropped | date_max OK? |
+|---------|----------:|------------:|----------:|-------------:|:------------:|
+| coffee_daily | 567 | 523 | **523** | 44 (7.8%) | ✅ |
+| coffee_weekly | 145 | 142 | **142** | 3 (2.1%) | ✅ |
+| corn_daily | 731 | 687 | **687** | 44 (6.0%) | ✅ |
+| corn_weekly | 140 | 133 | **133** | 7 (5.0%) | ✅ |
+
+All dropped rows fall at the **start** of the test period (date_min of aligned is later than date_min of test_df; date_max matches). Coffee daily and corn daily both drop exactly 44 rows, consistent with the LSTM/TCN warm-up window of 45 days. This is expected behavior, not a bug.
 
 ---
 
