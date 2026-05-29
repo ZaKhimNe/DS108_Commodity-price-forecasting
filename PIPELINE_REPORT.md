@@ -88,15 +88,15 @@ Module  │ File                          │ Description
 
 | Dataset | LGBM | RF | LSTM | TCN | Stack |
 |---------|-----:|---:|-----:|----:|------:|
-| Coffee Daily | 0.405 | 0.42 | **0.709** | 0.699 | **0.709** |
-| Coffee Weekly | 0.404 | 0.41 | **0.667** | 0.331 | 0.667 |
-| Corn Daily | 0.475 | 0.49 | 0.601 | **0.662** | 0.662 |
-| Corn Weekly | **0.598** | 0.55 | 0.55 | 0.54 | 0.598 |
+| Coffee Daily | 0.405 | 0.472 | **0.477** | 0.430 | 0.467 |
+| Coffee Weekly | 0.404 | 0.469 | **0.557** | 0.529 | 0.540 |
+| Corn Daily | 0.475 | 0.516 | 0.564 | **0.585** | 0.517 |
+| Corn Weekly | **0.598** | 0.466 | 0.504 | 0.510 | 0.496 |
 
 **Notes:**
-- LSTM outperforms LGBM by +30.4% AUC on Coffee Daily — sequence patterns matter
-- TCN performs best on Corn Daily (0.662) — dilated causal convolution suits corn seasonality cycles
-- Walkforward cross-validation substantially reduced overfitting vs initial experiments
+- LSTM outperforms LGBM on Coffee Weekly +15.3pp (0.557 vs 0.404) — sequence patterns matter
+- TCN performs best on Corn Daily (0.585) — dilated causal convolution suits corn seasonality cycles
+- Corn Weekly: LGBM (0.598) best — weekly seasonality rule-based features sufficient
 
 ---
 

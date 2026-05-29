@@ -443,12 +443,12 @@ Dữ liệu: Coffee (KC=F) và Corn (ZC=F) kỳ hạn, 2010–2026. Phân chia c
 
 | Dataset | LightGBM | RF | LSTM | TCN | Stack |
 |---------|----------|-----|------|-----|-------|
-| Coffee Daily | 0.405 | 0.42 | **0.709** | 0.699 | **0.709** |
-| Coffee Weekly | 0.404 | 0.41 | **0.667** | 0.331 | 0.667 |
-| Corn Daily | 0.475 | 0.49 | 0.601 | **0.662** | 0.662 |
-| Corn Weekly | **0.598** | 0.55 | 0.55 | 0.54 | 0.598 |
+| Coffee Daily | 0.405 | 0.472 | **0.477** | 0.430 | 0.467 |
+| Coffee Weekly | 0.404 | 0.469 | **0.557** | 0.529 | 0.540 |
+| Corn Daily | 0.475 | 0.516 | 0.564 | **0.585** | 0.517 |
+| Corn Weekly | **0.598** | 0.466 | 0.504 | 0.510 | 0.496 |
 
-LSTM và TCN vượt LightGBM đáng kể trên Coffee Daily (+30.4% AUC). TCN tốt nhất cho Corn Daily (0.662). Ngô Weekly là ngoại lệ: LightGBM (0.598) thắng cả sequence models — seasonality rule-based features đủ mạnh ở độ phân giải tuần.
+Sequence models vượt LightGBM trên phần lớn datasets: Coffee Weekly LSTM +15.3pp (0.557 vs 0.404), Corn Daily TCN +11.0pp (0.585 vs 0.475). Corn Weekly là ngoại lệ: LGBM (0.598) thắng sequence models — seasonality rule-based features đủ mạnh ở weekly resolution.
 
 **Bảng II: Backtesting — Production Candidates**
 
@@ -534,7 +534,7 @@ merged = test_df.merge(prob_df[['Date', 'prob_up', 'prob_down']], on='Date', how
 
 Bài báo trình bày hệ thống pipeline dữ liệu đa nguồn với bốn đóng góp kỹ thuật. Thứ nhất, nguyên tắc nhân quả được duy trì xuyên suốt: `center=False` trong rolling statistics, ffill thay vì bfill, MoM/YoY tính trước ffill, embargo gap tại biên phân chia, và scaler fit trên train only. Thứ hai, phát hiện và sửa lỗi data leakage P0 trong regression pipeline — trường hợp điển hình cho thấy metadata columns cần khai báo tường minh trong exclusion list. Thứ ba, lag sinh học được xác thực thống kê qua CCF bootstrap (34 tuần coffee, 9 tuần corn). Thứ tư, module LLM calendar (04b) chứng minh kiến trúc LLM-as-feature-extractor với few-shot JSON prompting, cải thiện AUC +8.7pp trên Coffee Weekly.
 
-Kết quả thực nghiệm: AUC-ROC 0.709 (Coffee Daily LSTM/Stack), Coffee Weekly RF alpha +16.4pp, Corn Daily MC RF alpha +57.4pp (model +30.7% khi BH −26.7%), Sharpe dương qua 3/3 năm walkforward cho Coffee. Hurdle model xác nhận bất đối xứng downside/upside của ngô với Stage 2b r=+0.371 (p<0.0001).
+Kết quả thực nghiệm: AUC-ROC 0.585 (Corn Daily TCN), 0.557 (Coffee Weekly LSTM), Coffee Weekly RF alpha +16.4pp, Corn Daily MC RF alpha +57.4pp (model +30.7% khi BH −26.7%), Sharpe dương qua 3/3 năm walkforward cho Coffee. Hurdle model xác nhận bất đối xứng downside/upside của ngô với Stage 2b r=+0.371 (p<0.0001).
 
 Hướng phát triển: bộ lọc VIX regime (ngừng giao dịch khi VIX > 25), tích hợp CONAB PDF qua trực tiếp với pdfplumber, và paper trading tracking từ 2026.
 
