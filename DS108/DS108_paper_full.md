@@ -101,7 +101,7 @@ Khi σ(t) < 10⁻⁴ kéo dài ≥ 4 ngày liên tục, đoạn đó được x�
 
 ### B. Xử Lý Giá Trị Khuyết Theo Đặc Tính Vật Lý
 
-**Biến liên tục (T_max, T_min, VPD_max, ET0):** Forward-fill (`ffill`). Các biến này có tính liên tục vật lý cao: nhiệt độ không đột ngột thay đổi lớn giữa hai ngày liền kề. `ffill` chỉ truyền thông tin từ quá khứ sang hiện tại — đảm bảo tính nhân quả tuyệt đối, không giống `bfill` hay nội suy tuyến tính.
+**Biến liên tục (T_max, T_min, VPD_max, ET0):** Forward-fill (`ffill`). Các biến này có tính liên tục vật lý cao: nhiệt độ không đột ngột thay đổi lớn giữa hai ngày liền kề. `ffill` chỉ truyền thông tin từ quá khứ sang hiện tại — đảm bảo tính nhân quả tuyệt đối, không giống `bfill` hay nội suy tuyến tính. KNN imputation sử dụng k neighbors gần nhất trong **toàn bộ dataset** — về mặt kỹ thuật có thể dùng dữ liệu tương lai để vá lỗ hổng quá khứ, vi phạm tính nhân quả. MICE (Multiple Imputation by Chained Equations) có cùng vấn đề khi chạy trên toàn chuỗi. `ffill` là lựa chọn duy nhất đảm bảo causal constraint tuyệt đối: tại mỗi điểm thiếu t, chỉ giá trị hợp lệ cuối cùng trước t được sử dụng.
 
 **Lượng mưa (precipitation_sum):** Zero-fill (`fillna(0)`). Không có dữ liệu lượng mưa = không mưa. Đây là xấp xỉ conservative, tránh tạo lượng mưa giả tạo.
 
