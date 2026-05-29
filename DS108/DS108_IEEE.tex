@@ -652,7 +652,7 @@ Không embargo       & 0.405 & 0.475 & $+$0.000 \\
 \item[a] $\Delta$ so với LGBM standalone (Nhóm 2).
 \item[b] Trung bình $\Delta$ Coffee ($+$0.248) và Corn ($+$0.228). center=True
 inflate gain RSI\_adj 10--14$\times$ — dấu hiệu look-ahead contamination.
-Tuy nhiên, center=True inflate vẫn thấp hơn Stacking clean (0.709/0.662)
+Tuy nhiên, center=True inflate vẫn thấp hơn Stacking clean (0.467/0.517)
 — chứng minh leakage không thể thay thế ensemble diversity.
 \end{tablenotes}
 \end{threeparttable}
@@ -667,14 +667,13 @@ flat predictions gần zero, dẫn đến $r$ thấp.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\columnwidth]{fig5_hurdle.pdf}
-\caption{Hurdle model: scatter predicted vs.\ actual return. Hàng trên:
-Corn Daily; hàng dưới: Coffee Daily. Cột trái~(a): Stage~2b --- down trades,
-predicted $|\text{return}|$ vs.\ actual $|\text{return}|$; Corn Daily
-$r{=}{+}0.371^{***}$ ($p{<}0.0001$, $n{=}164$). Cột phải~(b): Full hurdle
-combined (signed). Stage~2a bị loại khỏi hình vì model dừng tại
-\texttt{best\_iteration}{=}1 --- chỉ dự đoán hằng số gần trung bình, không
-có thông tin phân biệt biên độ tăng. Đường thẳng: OLS. Sao:
-$^{*}{<}0.05$, $^{**}{<}0.01$, $^{***}{<}0.001$.}
+\caption{Hurdle model (hàng trên: Corn Daily; hàng dưới: Coffee Daily).
+Cột~(a)~Stage~2a (up trades): box+jitter theo bin predicted value --- chỉ
+5--7 giá trị unique (\texttt{best\_iter}{=}1, degenerate predictor). Cột~(b)~Stage~2b
+(down trades): scatter predicted $|\text{return}|$ vs.\ actual $|\text{return}|$;
+Corn Daily $r{=}{+}0.371^{***}$ ($p{<}0.0001$, $n{=}164$). Cột~(c)~Full
+hurdle combined (signed prediction vs.\ actual). Đường thẳng: OLS.
+Sao: $^{*}{<}0.05$, $^{**}{<}0.01$, $^{***}{<}0.001$.}
 \label{fig:hurdle}
 \end{figure}
 
@@ -686,6 +685,21 @@ Stage 2a: hồi quy chỉ trên positive subset ($\text{return} > \theta$);
 Stage 2b: hồi quy trên negative subset ($\text{return} < -\theta$),
 target = $|\text{return}|$; $\hat{\pi}, \hat{\rho}$: load từ pipeline
 multiclass (18b).
+
+\textbf{Phát hiện bất đối xứng Stage~2a/2b.} Stage~2a bị degenerate:
+\texttt{best\_iteration}$=$1 trên tất cả datasets, tạo ra chỉ 5--7 giá trị
+dự báo gần như hằng số (std $\approx$0.0007 so với std$=$0.0076 của Stage~2b).
+Nguyên nhân: positive subset (return$>\theta$) phân bố hẹp và đồng đều ---
+\texttt{return\_future} khi tăng thường xoay quanh 3--8\%, ít biến thiên
+đặc trưng theo từng quan sát. Ngược lại, negative subset tập hợp cú sốc
+giảm không đồng đều: drought shock, macro policy shock, supply disruption ---
+tạo ra variance đặc trưng mà LightGBM có thể học được. Stage~2b Corn Daily
+đạt $r{=}{+}0.371$ ($p{<}0.0001$), top features \texttt{cal\_cos\_week}
+(gain$=$0.325, thu hoạch Oct--Nov) và \texttt{inf\_CPI\_YoY\_pct}
+(gain$=$0.300), nhất quán với harvest supply shock và macro transmission. Kết
+luận: \emph{trong commodity forecasting, downside risk có thể dự báo được về
+biên độ, upside thì không} --- phát hiện này nhất quán với lý thuyết tài
+chính về bất đối xứng loss aversion và carry risk premium.
 
 \begin{table}[htbp]
 \caption{Pearson $r$ — Single Regression vs.\ Full Hurdle}

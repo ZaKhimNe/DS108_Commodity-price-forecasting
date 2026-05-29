@@ -548,10 +548,11 @@ def fig5_hurdle():
         (os.path.join(MODELS, "22_hurdle_model",
                       "test_predictions_integrated_coffee_daily.csv"), "Coffee Daily"),
     ]
-    # 2x2 layout: Stage2b (meaningful, r=+0.371) + Full Hurdle
-    # Stage 2a dropped: best_iteration=1 => constant predictor (5-7 unique values)
-    # => scatter would appear as a vertical stripe, not informative for publication.
-    fig, axes = plt.subplots(2, 2, figsize=(7.0, 5.0))
+    # 2x3 layout: Stage2a | Stage2b | Full Hurdle
+    # Stage 2a has best_iteration=1 (constant predictor, 5-7 unique values).
+    # Displayed as a strip+box plot instead of scatter to honestly show
+    # the near-constant prediction range and actual return distribution.
+    fig, axes = plt.subplots(2, 3, figsize=(7.0, 5.5))
 
     def scatter_panel(ax, x, y, color, label, xlabel, ylabel):
         mask = ~(np.isnan(x) | np.isnan(y))
@@ -567,41 +568,98 @@ def fig5_hurdle():
         ax.plot(xl, m * xl + b, color=color, lw=1.2)
         ax.axhline(0, color="#ccc", lw=0.5)
         ax.axvline(0, color="#ccc", lw=0.5)
-        stars = "***" if p < 0.001 else ("**" if p < 0.01 else ("*" if p < 0.05 else " (n.s.)"))
+        stars = "***" if p < 0.001 else ("**" if p < 0.01 else ("*" if p < 0.05 else " n.s."))
         ax.set_title(f"{label}\nr={r:+.3f}{stars}  n={mask.sum()}",
                      fontsize=7.5, pad=3)
         ax.set_xlabel(xlabel, fontsize=7)
         ax.set_ylabel(ylabel, fontsize=7)
 
+    def stage2a_panel(ax, x_pred, y_actual, color, label):
+        """Stage 2a: near-constant predictor → show as box-per-bin with jitter."""
+        mask = ~(np.isnan(x_pred) | np.isnan(y_actual))
+        xm = x_pred[mask]
+        ym = y_actual[mask]
+        if len(xm) < 5:
+            ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=7)
+            return
+        r, p = stats.pearsonr(xm, ym)
+
+        # Bin by predicted value (few unique values → each unique = one bin)
+        unique_x = np.sort(np.unique(np.round(xm, 4)))
+        positions = np.arange(len(unique_x))
+        groups = [ym[np.round(xm, 4) == ux] for ux in unique_x]
+
+        # box plot per bin
+        bp = ax.boxplot(groups, positions=positions, widths=0.4,
+                        patch_artist=True, showfliers=False,
+                        medianprops=dict(color="white", lw=1.5))
+        for patch in bp["boxes"]:
+            patch.set_facecolor(color + "55")
+            patch.set_edgecolor(color)
+            patch.set_linewidth(0.8)
+        for item in ["whiskers", "caps"]:
+            for line in bp[item]:
+                line.set_color(color)
+                line.set_linewidth(0.7)
+
+        # jitter overlay
+        rng = np.random.default_rng(42)
+        for i, (pos, grp) in enumerate(zip(positions, groups)):
+            jitter = rng.uniform(-0.18, 0.18, len(grp))
+            ax.scatter(pos + jitter, grp, alpha=0.3, s=5, color=color,
+                       rasterized=True, zorder=3)
+
+        ax.set_xticks(positions)
+        ax.set_xticklabels([f"{v:.3f}" for v in unique_x],
+                           fontsize=5, rotation=40)
+        stars = "***" if p < 0.001 else ("**" if p < 0.01 else ("*" if p < 0.05 else " n.s."))
+        n_unique = len(unique_x)
+        ax.set_title(f"{label}\nr={r:+.3f}{stars}  n={mask.sum()}\n"
+                     f"({n_unique} unique pred. values — near-constant)",
+                     fontsize=6.8, pad=3)
+        ax.set_xlabel("Predicted return (binned)", fontsize=7)
+        ax.set_ylabel("Actual return", fontsize=7)
+
     for row_idx, (hcsv, crop_label) in enumerate(hurdle_csvs):
-        ax_2b = axes[row_idx][0]
-        ax_fh = axes[row_idx][1]
+        ax_2a = axes[row_idx][0]
+        ax_2b = axes[row_idx][1]
+        ax_fh = axes[row_idx][2]
 
         if not os.path.exists(hcsv):
-            for ax in [ax_2b, ax_fh]:
+            for ax in [ax_2a, ax_2b, ax_fh]:
                 ax.text(0.5, 0.5, "Not found", ha="center", va="center",
                         transform=ax.transAxes, fontsize=7)
             continue
 
         df = pd.read_csv(hcsv, parse_dates=["Date"])
-        cols_needed = ["y_true", "stage2_neg_magnitude", "full_hurdle_pred", "target_binary"]
+        cols_needed = ["y_true", "stage2_magnitude", "stage2_neg_magnitude",
+                       "full_hurdle_pred", "target_binary"]
         if any(c not in df.columns for c in cols_needed):
-            for ax in [ax_2b, ax_fh]:
+            for ax in [ax_2a, ax_2b, ax_fh]:
                 ax.text(0.5, 0.5, "Missing cols", ha="center", va="center",
                         transform=ax.transAxes, fontsize=7)
             continue
 
-        # Stage 2b: abs(y_true) so both axes are positive magnitudes
-        # matches pearsonr convention in results JSON (r=+0.371 for Corn Daily)
+        pos_mask = df["target_binary"].values == 1.0
         neg_mask = df["target_binary"].values == 0.0
+
+        # Panel A: Stage 2a — box+jitter per unique predicted value
+        stage2a_panel(ax_2a,
+                      df.loc[pos_mask, "stage2_magnitude"].values,
+                      df.loc[pos_mask, "y_true"].values,
+                      C["stage2a"],
+                      f"{crop_label} — Stage 2a (Up)")
+
+        # Panel B: Stage 2b — scatter, abs(y_true) → r matches JSON (+0.371)
         scatter_panel(ax_2b,
                       df.loc[neg_mask, "stage2_neg_magnitude"].values,
                       np.abs(df.loc[neg_mask, "y_true"].values),
                       C["stage2b"],
-                      f"{crop_label} — Stage 2b",
+                      f"{crop_label} — Stage 2b (Down)",
                       xlabel="Predicted |return|", ylabel="Actual |return|")
 
-        # Full hurdle: signed prediction vs signed actual
+        # Panel C: Full hurdle combined
         scatter_panel(ax_fh,
                       df["full_hurdle_pred"].values,
                       df["y_true"].values,
@@ -614,7 +672,7 @@ def fig5_hurdle():
     fig.text(0.01, 0.25, "Coffee Daily", va="center", rotation=90,
              fontsize=8, fontweight="bold", color="#333")
 
-    fig.suptitle("Fig. 5 — Hurdle Model: Stage 2b and Full Hurdle",
+    fig.suptitle("Fig. 5 — Hurdle Model: Stage 2a / Stage 2b / Full Hurdle",
                  fontsize=9, fontweight="bold")
     fig.tight_layout(rect=[0.03, 0, 1, 0.97])
     out = os.path.join(FIGS, "fig5_hurdle.pdf")

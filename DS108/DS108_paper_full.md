@@ -518,7 +518,9 @@ Hurdle model hai tầng: Stage 1 phân loại binary (positive / non-positive ho
 
 *p<0.0001, n=164 negative observations
 
-Kết quả nổi bật: Stage 2b Corn Daily r=+0.371 — **downward moves của ngô có cấu trúc dự báo được**, trong khi upward moves (Stage 2a best_iter=1) không học được. Top features Stage 2b: `cal_cos_week` (gain=0.325, thu hoạch Oct–Nov), `inf_CPI_YoY_pct` (gain=0.300, macro stress), `usd_rv_20d` (gain=0.192, USD volatility). Bất đối xứng này nhất quán với cú sốc nguồn cung thu hoạch và truyền dẫn chính sách tiền tệ có signature rõ hơn so với tăng giá do cầu.
+Kết quả nổi bật: Stage 2b Corn Daily r=+0.371 (p<0.0001) — **downward moves của ngô có cấu trúc dự báo được**, trong khi upward moves thì không.
+
+**Bất đối xứng Stage 2a / Stage 2b (phát hiện quan trọng):** Stage 2a bị degenerate trên tất cả datasets — LightGBM dừng tại `best_iteration=1`, tạo ra 5–7 giá trị dự báo gần hằng số (std ≈ 0.0007 so với std = 0.0076 của Stage 2b Corn Daily). Nguyên nhân cơ học: positive return khi tăng thường phân bố hẹp và đồng đều (3–8%), ít variance đặc trưng theo quan sát, khiến LightGBM không tìm thấy split rule có ích nào vượt qua regularization. Ngược lại, negative subset bao gồm các cú sốc không đồng nhất (drought shock, macro policy, supply disruption) tạo ra variance đặc trưng học được. Top features Stage 2b: `cal_cos_week` (gain=0.325, thu hoạch Oct–Nov), `inf_CPI_YoY_pct` (gain=0.300, macro stress), `usd_rv_20d` (gain=0.192). Bất đối xứng này nhất quán với lý thuyết commodity risk premium: **downside risk có cấu trúc (harvest supply shock, macro transmission); upside không có cấu trúc tương đương**.
 
 Full hurdle r=+0.198 > single r=+0.178 — cải thiện nhỏ nhưng ổn định qua Date inner-join alignment:
 
