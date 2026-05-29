@@ -548,87 +548,73 @@ def fig5_hurdle():
         (os.path.join(MODELS, "22_hurdle_model",
                       "test_predictions_integrated_coffee_daily.csv"), "Coffee Daily"),
     ]
-    single_csv = os.path.join(MODELS, "14c_lgbm_regression",
-                              "test_predictions_integrated_corn_daily.csv")
+    # 2x2 layout: Stage2b (meaningful, r=+0.371) + Full Hurdle
+    # Stage 2a dropped: best_iteration=1 => constant predictor (5-7 unique values)
+    # => scatter would appear as a vertical stripe, not informative for publication.
+    fig, axes = plt.subplots(2, 2, figsize=(7.0, 5.0))
 
-    fig, axes = plt.subplots(2, 3, figsize=(7.0, 5.5))
+    def scatter_panel(ax, x, y, color, label, xlabel, ylabel):
+        mask = ~(np.isnan(x) | np.isnan(y))
+        xm, ym = x[mask], y[mask]
+        if len(xm) < 5:
+            ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=7)
+            return
+        r, p = stats.pearsonr(xm, ym)
+        ax.scatter(xm, ym, alpha=0.22, s=7, color=color, rasterized=True)
+        m, b = np.polyfit(xm, ym, 1)
+        xl = np.linspace(xm.min(), xm.max(), 100)
+        ax.plot(xl, m * xl + b, color=color, lw=1.2)
+        ax.axhline(0, color="#ccc", lw=0.5)
+        ax.axvline(0, color="#ccc", lw=0.5)
+        stars = "***" if p < 0.001 else ("**" if p < 0.01 else ("*" if p < 0.05 else " (n.s.)"))
+        ax.set_title(f"{label}\nr={r:+.3f}{stars}  n={mask.sum()}",
+                     fontsize=7.5, pad=3)
+        ax.set_xlabel(xlabel, fontsize=7)
+        ax.set_ylabel(ylabel, fontsize=7)
 
     for row_idx, (hcsv, crop_label) in enumerate(hurdle_csvs):
-        row_axes = axes[row_idx]
+        ax_2b = axes[row_idx][0]
+        ax_fh = axes[row_idx][1]
 
         if not os.path.exists(hcsv):
-            for ax in row_axes:
-                ax.text(0.5, 0.5, f"Not found:\n{os.path.basename(hcsv)}",
-                        ha="center", va="center", transform=ax.transAxes, fontsize=6)
+            for ax in [ax_2b, ax_fh]:
+                ax.text(0.5, 0.5, "Not found", ha="center", va="center",
+                        transform=ax.transAxes, fontsize=7)
             continue
 
         df = pd.read_csv(hcsv, parse_dates=["Date"])
-        # required columns
-        cols_needed = ["y_true", "stage2_magnitude", "stage2_neg_magnitude",
-                       "full_hurdle_pred", "target_binary"]
-        missing = [c for c in cols_needed if c not in df.columns]
-        if missing:
-            for ax in row_axes:
-                ax.text(0.5, 0.5, f"Missing cols:\n{missing}",
-                        ha="center", va="center", transform=ax.transAxes, fontsize=6)
+        cols_needed = ["y_true", "stage2_neg_magnitude", "full_hurdle_pred", "target_binary"]
+        if any(c not in df.columns for c in cols_needed):
+            for ax in [ax_2b, ax_fh]:
+                ax.text(0.5, 0.5, "Missing cols", ha="center", va="center",
+                        transform=ax.transAxes, fontsize=7)
             continue
 
-        def scatter_panel(ax, x, y, color, label, xlabel="Predicted |return|",
-                          ylabel="Actual |return|"):
-            mask = ~(np.isnan(x) | np.isnan(y))
-            xm, ym = x[mask], y[mask]
-            if len(xm) < 5:
-                ax.text(0.5, 0.5, "No data", ha="center", va="center",
-                        transform=ax.transAxes, fontsize=7)
-                return
-            r, p = stats.pearsonr(xm, ym)
-            ax.scatter(xm, ym, alpha=0.25, s=6, color=color, rasterized=True)
-            m, b = np.polyfit(xm, ym, 1)
-            xl = np.linspace(xm.min(), xm.max(), 100)
-            ax.plot(xl, m * xl + b, color=color, lw=1.0)
-            ax.axhline(0, color="#ccc", lw=0.5)
-            ax.axvline(0, color="#ccc", lw=0.5)
-            stars = "***" if p < 0.001 else ("**" if p < 0.01 else ("*" if p < 0.05 else ""))
-            ax.set_title(f"{label}\nr={r:+.3f}{stars} (n={mask.sum()})",
-                         fontsize=7.5, pad=3)
-            ax.set_xlabel(xlabel, fontsize=7)
-            ax.set_ylabel(ylabel, fontsize=7)
-
-        # Panel A: Stage2a — positive trades: predicted vs actual (both positive)
-        pos_mask = df["target_binary"].values == 1.0
-        scatter_panel(row_axes[0],
-                      df.loc[pos_mask, "stage2_magnitude"].values,
-                      df.loc[pos_mask, "y_true"].values,
-                      C["stage2a"],
-                      f"{crop_label}\nStage 2a (Up trades)",
-                      xlabel="Predicted return", ylabel="Actual return")
-
-        # Panel B: Stage2b — negative trades.
-        # Use abs(y_true) so both axes are magnitudes → matches r=+0.371 in results JSON.
-        # (pearsonr(predicted_magnitude, actual_magnitude) = +0.371)
+        # Stage 2b: abs(y_true) so both axes are positive magnitudes
+        # matches pearsonr convention in results JSON (r=+0.371 for Corn Daily)
         neg_mask = df["target_binary"].values == 0.0
-        scatter_panel(row_axes[1],
+        scatter_panel(ax_2b,
                       df.loc[neg_mask, "stage2_neg_magnitude"].values,
                       np.abs(df.loc[neg_mask, "y_true"].values),
                       C["stage2b"],
-                      f"{crop_label}\nStage 2b (Down trades)",
+                      f"{crop_label} — Stage 2b",
                       xlabel="Predicted |return|", ylabel="Actual |return|")
 
-        # Panel C: Full hurdle vs actual return (signed)
-        scatter_panel(row_axes[2],
+        # Full hurdle: signed prediction vs signed actual
+        scatter_panel(ax_fh,
                       df["full_hurdle_pred"].values,
                       df["y_true"].values,
                       C["hurdle"],
-                      f"{crop_label}\nFull Hurdle Combined",
+                      f"{crop_label} — Full Hurdle",
                       xlabel="Predicted return", ylabel="Actual return")
 
-    # Row labels
-    fig.text(0.01, 0.75, "Corn Daily", va="center", rotation=90,
+    fig.text(0.01, 0.73, "Corn Daily",   va="center", rotation=90,
              fontsize=8, fontweight="bold", color="#333")
     fig.text(0.01, 0.25, "Coffee Daily", va="center", rotation=90,
              fontsize=8, fontweight="bold", color="#333")
 
-    fig.suptitle("Fig. 5 — Hurdle Model: Predicted vs. Actual Return Magnitude",
+    fig.suptitle("Fig. 5 — Hurdle Model: Stage 2b and Full Hurdle",
                  fontsize=9, fontweight="bold")
     fig.tight_layout(rect=[0.03, 0, 1, 0.97])
     out = os.path.join(FIGS, "fig5_hurdle.pdf")

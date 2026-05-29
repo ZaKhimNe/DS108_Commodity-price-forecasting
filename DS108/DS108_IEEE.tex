@@ -667,13 +667,14 @@ flat predictions gần zero, dẫn đến $r$ thấp.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\columnwidth]{fig5_hurdle.pdf}
-\caption{Hurdle model: scatter predicted vs.\ actual return magnitude.
-Hàng trên: Corn Daily. Hàng dưới: Coffee Daily. Cột (a)~Stage~2a --- Up
-trades (predicted upside vs.\ actual positive return). Cột (b)~Stage~2b ---
-Down trades (predicted magnitude vs.\ $|\text{actual return}|$; Corn Daily
-$r{=}{+}0.371$, $p{<}0.0001$, $n{=}164$). Cột (c)~Full hurdle combined
-(signed prediction vs.\ actual return). Đường thẳng: hồi quy OLS; sao:
-$^{*}p{<}0.05$, $^{**}p{<}0.01$, $^{***}p{<}0.001$.}
+\caption{Hurdle model: scatter predicted vs.\ actual return. Hàng trên:
+Corn Daily; hàng dưới: Coffee Daily. Cột trái~(a): Stage~2b --- down trades,
+predicted $|\text{return}|$ vs.\ actual $|\text{return}|$; Corn Daily
+$r{=}{+}0.371^{***}$ ($p{<}0.0001$, $n{=}164$). Cột phải~(b): Full hurdle
+combined (signed). Stage~2a bị loại khỏi hình vì model dừng tại
+\texttt{best\_iteration}{=}1 --- chỉ dự đoán hằng số gần trung bình, không
+có thông tin phân biệt biên độ tăng. Đường thẳng: OLS. Sao:
+$^{*}{<}0.05$, $^{**}{<}0.01$, $^{***}{<}0.001$.}
 \label{fig:hurdle}
 \end{figure}
 
