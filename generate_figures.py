@@ -682,6 +682,79 @@ def fig5_hurdle():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# FIG 6 — Ablation Study Bar Chart
+# ═══════════════════════════════════════════════════════════════════════════════
+def fig6_ablation():
+    """Grouped bar: Clean LGBM vs center=True (leak) vs Stack clean."""
+    data = {
+        "Coffee Daily": {
+            "LGBM clean":     0.405,
+            "center=True\n(leak)": 0.653,
+            "Stack clean":    0.467,
+        },
+        "Corn Daily": {
+            "LGBM clean":     0.475,
+            "center=True\n(leak)": 0.703,
+            "Stack clean":    0.517,
+        },
+    }
+
+    colors = {
+        "LGBM clean":          C["lgbm"],
+        "center=True\n(leak)": "#d62728",
+        "Stack clean":         C["stack"],
+    }
+
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 3.2), sharey=True)
+
+    for ax, (ds, vals) in zip(axes, data.items()):
+        labels = list(vals.keys())
+        aucs   = list(vals.values())
+        xs     = np.arange(len(labels))
+        cols   = [colors[l] for l in labels]
+
+        bars = ax.bar(xs, aucs, color=cols, width=0.55, alpha=0.82,
+                      edgecolor="white", linewidth=0.6)
+
+        # value labels on top of each bar
+        for bar, v in zip(bars, aucs):
+            ax.text(bar.get_x() + bar.get_width() / 2,
+                    v + 0.008, f"{v:.3f}",
+                    ha="center", va="bottom", fontsize=7,
+                    fontweight="bold")
+
+        # delta annotations for leak and stack vs LGBM clean
+        ref = aucs[0]
+        for i, (v, lbl) in enumerate(zip(aucs[1:], labels[1:]), start=1):
+            delta = v - ref
+            sign  = "+" if delta >= 0 else ""
+            color_d = "#d62728" if delta > 0 else "#1b7837"
+            ax.text(xs[i], v / 2,
+                    f"{sign}{delta:+.3f}",
+                    ha="center", va="center", fontsize=6.5,
+                    color="white", fontweight="bold")
+
+        ax.axhline(0.5, color="#aaa", ls="--", lw=0.6, label="AUC=0.5 (random)")
+        ax.set_xticks(xs)
+        ax.set_xticklabels(labels, fontsize=7)
+        ax.set_title(ds, fontsize=8.5, fontweight="bold")
+        ax.set_ylim(0.35, 0.78)
+        ax.set_ylabel("Test AUC-ROC" if ax == axes[0] else "", fontsize=7)
+        ax.yaxis.set_tick_params(labelsize=7)
+
+    axes[1].legend(loc="upper left", fontsize=6, framealpha=0.4)
+
+    fig.suptitle(
+        "Fig. 6 — Ablation: Clean Pipeline vs Look-Ahead Leakage (center=True)",
+        fontsize=9, fontweight="bold")
+    fig.tight_layout()
+    out = os.path.join(FIGS, "fig6_ablation.pdf")
+    fig.savefig(out)
+    plt.close(fig)
+    print(f"  [OK] {out}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
@@ -691,4 +764,5 @@ if __name__ == "__main__":
     fig3_split()
     fig4_equity()
     fig5_hurdle()
+    fig6_ablation()
     print("\nDone. All PDFs written to figures/")

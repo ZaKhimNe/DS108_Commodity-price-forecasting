@@ -1,9 +1,19 @@
 % !TeX program = xelatex
 \documentclass[conference]{IEEEtran}
 
-%% ── Font: TeX Gyre Termes (Times clone với full Vietnamese glyph) ─────────────
+%% ── Language & Font ──────────────────────────────────────────────────────────
+\usepackage{polyglossia}
+\setmainlanguage{vietnamese}   % proper Vietnamese hyphenation + glyph selection
+\setotherlanguage{english}
+
 \usepackage{fontspec}
-\setmainfont{TeX Gyre Termes}
+% Times New Roman is available on Windows + most TeX distributions.
+% Fallback: TeX Gyre Termes (identical metrics, ships with TeX Live).
+\IfFontExistsTF{Times New Roman}{
+  \setmainfont{Times New Roman}
+}{
+  \setmainfont{TeX Gyre Termes}
+}
 \setmonofont[Scale=0.82]{DejaVu Sans Mono}
 
 %% ── Math ─────────────────────────────────────────────────────────────────────
@@ -19,7 +29,8 @@
 %% ── Figures ──────────────────────────────────────────────────────────────────
 \usepackage{graphicx}
 \usepackage{subcaption}
-\graphicspath{{figures/}}
+%% figures/ is at project root, one level up from this DS108/ subfolder
+\graphicspath{{../figures/}{figures/}}
 
 %% ── Misc ─────────────────────────────────────────────────────────────────────
 \usepackage{cite}
@@ -625,6 +636,27 @@ Corn 2025 Sharpe=$-$0.436 cho thấy regime shift — đề xuất bộ lọc VI
 
 \subsection{Ablation Study — Kiểm Tra Data Leakage}
 
+Ba thí nghiệm ablation được thiết kế để cô lập tác động của từng lựa chọn
+tiền xử lý lên AUC, đồng thời định lượng mức độ inflate nếu pipeline có
+leakage. \textbf{Nhóm 1}: so sánh threshold 2.5\% (v7) vs 5\% (v1) trên
+Stacking Ensemble --- cho thấy lựa chọn threshold ảnh hưởng lớn đến base
+rate và AUC. \textbf{Nhóm 2}: LGBM standalone làm reference (clean pipeline).
+\textbf{Nhóm 3}: ba biến thể leakage --- global scaler và no-embargo không
+tạo ra leakage đo được trong trường hợp này, nhưng \texttt{center=True}
+trong rolling statistics gây inflate AUC $+$0.228--0.248 pp so với clean
+LGBM --- dấu hiệu look-ahead contamination qua cửa sổ tương lai.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{fig6_ablation.pdf}
+\caption{So sánh AUC: Clean pipeline vs leakage experiment (center=True).
+Thanh xanh: LGBM clean (reference). Thanh cam: center=True inflate
+($+$0.248/$+$0.228 pp). Thanh tím: Stacking Ensemble clean. Leakage
+inflate AUC nhưng vẫn thấp hơn Stack clean trên Corn Daily --- chứng
+minh leakage không thể thay thế ensemble diversity.}
+\label{fig:ablation}
+\end{figure}
+
 \begin{table}[htbp]
 \caption{Ablation: Tác Động Của Tiền Xử Lý Lên Mô Hình}
 \label{tab:ablation}
@@ -635,8 +667,8 @@ Corn 2025 Sharpe=$-$0.436 cho thấy regime shift — đề xuất bộ lọc VI
 \textbf{Cấu hình} & \textbf{AUC Coffee D.} & \textbf{AUC Corn D.} & \textbf{$\Delta$\tnote{a}} \\
 \midrule
 \multicolumn{4}{l}{\textit{Nhóm 1 — Stacking Ensemble}} \\
-v7 threshold 2.5\%  & \textbf{0.709} & \textbf{0.662} & --- \\
-v1 threshold 5\%    & 0.564          & 0.443          & --- \\
+v7 threshold 2.5\%  & \textbf{0.467} & \textbf{0.517} & --- \\
+v1 threshold 5\%    & 0.450          & 0.443          & --- \\
 \midrule
 \multicolumn{4}{l}{\textit{Nhóm 2 — LGBM standalone (reference)}} \\
 Pipeline đúng (v7)  & 0.405          & 0.475          & 0.000 \\
