@@ -1,6 +1,6 @@
 # DS108 AgriCommodity Futures — Multi-Source ML Dataset
 
-**Version:** 1.0 · **License:** CC BY 4.0 · **Period:** 2010–2026  
+**Version:** 1.0 · **License:** CC BY 4.0 · **Ingestion:** 2010–2026 · **Integrated data:** 2011-02-14 → 2025-12-19  
 **Paper:** *Hệ Thống Tiền Xử Lý Dữ Liệu Đa Nguồn và Dự Báo Biến Động Giá Hàng Hóa Nông Nghiệp*
 
 ---
@@ -15,12 +15,12 @@ The dataset was built as part of the DS108 research project with a focus on **ca
 
 ## Files
 
-| File | Rows | Features | Commodity | Frequency |
-|------|-----:|--------:|-----------|-----------|
-| `integrated_coffee_daily.csv` | 3,736 | ~89 | Coffee (KC=F) | Daily |
-| `integrated_coffee_weekly.csv` | 724 | ~82 | Coffee (KC=F) | Weekly (W-MON) |
-| `integrated_corn_daily.csv` | 3,733 | ~91 | Corn (ZC=F) | Daily |
-| `integrated_corn_weekly.csv` | 700 | ~84 | Corn (ZC=F) | Weekly (W-MON) |
+| File | Rows | Features | Commodity | Frequency | Period |
+|------|-----:|--------:|-----------|-----------|--------|
+| `integrated_coffee_daily.csv` | 2,832 | 99 | Coffee (KC=F) | Daily | 2011-02-14 → 2025-12-19 |
+| `integrated_coffee_weekly.csv` | 724 | 81 | Coffee (KC=F) | Weekly (W-MON) | 2011-02-14 → 2025-12-29 |
+| `integrated_corn_daily.csv` | 3,654 | 101 | Corn (ZC=F) | Daily | 2011-02-14 → 2025-12-19 |
+| `integrated_corn_weekly.csv` | 700 | 83 | Corn (ZC=F) | Weekly (W-MON) | 2011-02-14 → 2025-12-29 |
 
 ---
 

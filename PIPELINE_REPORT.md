@@ -70,17 +70,19 @@ Module  │ File                          │ Description
 
 | Dataset | n total | Train | Val | Test | Base rate train | Base rate test |
 |---------|--------:|------:|----:|-----:|----------------:|---------------:|
-| Coffee Daily | 3,736 | 2,556 | 365 | 567 | 35.0% | ~33% |
-| Coffee Weekly | 725 | 497 | 71 | 145 | 30.2% | ~30% |
-| Corn Daily | 3,650 | 2,490 | 356 | 731 | 29.8% | ~28% |
-| Corn Weekly | 710 | 485 | 69 | 140 | 36.4% | ~35% |
+| Coffee Daily | 2,832 | 1,975 | 276 | 567 | 32.1% | 39.0% |
+| Coffee Weekly | 724 | 505 | 72 | 145 | 28.7% | 33.1% |
+| Corn Daily | 3,654 | 2,550 | 359 | 731 | 31.9% | 26.0% |
+| Corn Weekly | 700 | 488 | 70 | 140 | 37.9% | 26.4% |
+
+> **Note — Coffee/Corn Daily train:** Walkforward CV (window=520, step=130) runs inside the train split. `n_train` reflects the full 70% chronological block; the last walkforward window is 1,000 rows. Val/Test are static held-out sets.
 
 **Threshold calibration (5% → 2.5%):**
 
 | | Base rate @ 5% | Base rate @ 2.5% | Note |
 |-|---------------:|------------------:|------|
-| Coffee Daily | 21.1% | **35.0%** | More balanced classes |
-| Corn Weekly | 9.3% | **36.4%** | 0 positives in test @ 5% → NaN AUC → **fixed** |
+| Coffee Daily | 21.1% | **32.1%** | More balanced classes |
+| Corn Weekly | 9.3% | **37.9%** | 0 positives in test @ 5% → NaN AUC → **fixed** |
 
 ---
 
