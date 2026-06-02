@@ -1,12 +1,13 @@
 """
 generate_figures.py — DS108 IEEE paper figure generator
 
-Produces 5 publication-quality PDFs in figures/:
+Produces 6 publication-quality PDFs in figures/:
   fig1_pipeline.pdf   — 8-stage pipeline architecture diagram
   fig2_ccf.pdf        — CCF lag analysis (coffee + corn weekly)
   fig3_split.pdf      — Train/Val/Test split with embargo gaps
-  fig4_equity.pdf     — Equity curves (stack vs B&H, coffee daily + weekly)
-  fig5_hurdle.pdf     — Hurdle model scatter: stage2a/2b/full/single (corn daily)
+  fig4_equity.pdf     — Equity curves (coffee weekly RF binary + corn daily MC RF L/S)
+  fig5_hurdle.pdf     — Hurdle model scatter: stage2a/2b/full (corn + coffee daily)
+  fig6_ablation.pdf   — Ablation bar chart: clean pipeline vs look-ahead leakage
 
 Run from project root:
   python generate_figures.py
@@ -297,10 +298,10 @@ def fig2_ccf():
         ax.legend(fontsize=5.5, framealpha=0.4, loc="upper right")
 
     fig.suptitle(
-        "Fig. 2 — CCF: Weather Variables vs. Future Return (dashed red = biological lag)",
+        "Fig. 4 — CCF: Weather Variables vs. Future Return (dashed red = biological lag)",
         fontsize=8.5, y=1.02, fontweight="bold")
     fig.tight_layout()
-    out = os.path.join(FIGS, "fig2_ccf.pdf")
+    out = os.path.join(FIGS, "fig4_ccf.pdf")
     fig.savefig(out)
     plt.close(fig)
     print(f"  [OK] {out}")
@@ -396,10 +397,10 @@ def fig3_split():
     fig.legend(handles=legend_patches, loc="lower center", ncol=4,
                fontsize=7, frameon=False, bbox_to_anchor=(0.5, -0.02))
 
-    fig.suptitle("Fig. 3 — Temporal Train/Val/Test Split with Embargo Gaps",
+    fig.suptitle("Fig. 5 — Temporal Train/Val/Test Split with Embargo Gaps",
                  fontsize=9, fontweight="bold", y=1.01)
     fig.tight_layout(rect=[0, 0.04, 1, 1])
-    out = os.path.join(FIGS, "fig3_split.pdf")
+    out = os.path.join(FIGS, "fig5_split.pdf")
     fig.savefig(out)
     plt.close(fig)
     print(f"  [OK] {out}")
@@ -431,19 +432,34 @@ def _build_equity(pred_csv, integrated_csv, model_col="y_pred_stack",
     return merged
 
 
-def _build_equity_ls(pred_csv, integrated_csv, step=7):
+def _strip_tz(series):
+    """Remove timezone from a datetime Series regardless of tz-aware or naive."""
+    s = pd.to_datetime(series)
+    if s.dt.tz is not None:
+        return s.dt.tz_convert(None)
+    return s
+
+
+def _build_equity_ls(pred_csv, integrated_csv, step=7,
+                     thr_up=0.33, thr_down=0.33):
     """Build L/S equity for MC RF: long=Up(2), short=Down(0), flat=Flat(1).
+    Uses probability thresholds matching 19b_backtesting_mc.py (thr=0.33 daily).
     step: non-overlapping stride (7 for daily to match backtesting engine)."""
     preds = pd.read_csv(pred_csv, parse_dates=["Date"])
     integ = pd.read_csv(integrated_csv, parse_dates=["Date"])
-    preds["Date"] = pd.to_datetime(preds["Date"]).dt.tz_localize(None)
-    integ["Date"] = pd.to_datetime(integ["Date"]).dt.tz_localize(None)
+    preds["Date"] = _strip_tz(preds["Date"])
+    integ["Date"] = _strip_tz(integ["Date"])
     merged = preds.merge(integ[["Date", "return_future"]], on="Date", how="inner")
     merged = merged.sort_values("Date").reset_index(drop=True)
     # Non-overlapping sampling matches backtesting engine (iloc[::step])
     merged = merged.iloc[::step].reset_index(drop=True)
-    # signal: +1 long (Up), -1 short (Down), 0 flat
-    merged["signal"] = merged["y_pred_rf"].map({2: 1, 0: -1, 1: 0})
+    # signal: apply probability threshold — mirrors 19b_backtesting_mc.py logic
+    # +1 long if prob_up > thr_up, -1 short if prob_down > thr_down, else 0 flat
+    prob_up   = merged["y_prob_rf_up"].values
+    prob_down = merged["y_prob_rf_down"].values
+    import numpy as np
+    merged["signal"] = np.where(prob_up   > thr_up,   1,
+                       np.where(prob_down > thr_down, -1, 0))
     merged["strat_ret"] = merged["signal"] * merged["return_future"]
     merged["bh_ret"]    = merged["return_future"]
     merged["equity_strat"] = (1 + merged["strat_ret"]).cumprod()
@@ -529,10 +545,10 @@ def fig4_equity():
     ax.set_ylabel("Cumulative Return", fontsize=7)
     ax.tick_params(axis="x", labelrotation=30, labelsize=6)
 
-    fig.suptitle("Fig. 4 — Equity Curves on Test Set (Production Candidates)",
+    fig.suptitle("Fig. 6 — Equity Curves on Test Set (Production Candidates)",
                  fontsize=9, fontweight="bold")
     fig.tight_layout()
-    out = os.path.join(FIGS, "fig4_equity.pdf")
+    out = os.path.join(FIGS, "fig6_equity.pdf")
     fig.savefig(out)
     plt.close(fig)
     print(f"  [OK] {out}")
@@ -641,8 +657,12 @@ def fig5_hurdle():
                         transform=ax.transAxes, fontsize=7)
             continue
 
-        pos_mask = df["target_binary"].values == 1.0
-        neg_mask = df["target_binary"].values == 0.0
+        # Use actual return threshold (0.025) to define pos/neg subsets —
+        # matches 22_hurdle_model training split (not target_binary which
+        # includes flat rows, giving wrong n=514 instead of n=164 for Stage 2b).
+        HURDLE_THR = 0.025
+        pos_mask = df["y_true"].values >  HURDLE_THR
+        neg_mask = df["y_true"].values < -HURDLE_THR
 
         # Panel A: Stage 2a — box+jitter per unique predicted value
         stage2a_panel(ax_2a,
@@ -672,10 +692,10 @@ def fig5_hurdle():
     fig.text(0.01, 0.25, "Coffee Daily", va="center", rotation=90,
              fontsize=8, fontweight="bold", color="#333")
 
-    fig.suptitle("Fig. 5 — Hurdle Model: Stage 2a / Stage 2b / Full Hurdle",
+    fig.suptitle("Fig. 8 — Hurdle Model: Stage 2a / Stage 2b / Full Hurdle",
                  fontsize=9, fontweight="bold")
     fig.tight_layout(rect=[0.03, 0, 1, 0.97])
-    out = os.path.join(FIGS, "fig5_hurdle.pdf")
+    out = os.path.join(FIGS, "fig8_hurdle.pdf")
     fig.savefig(out)
     plt.close(fig)
     print(f"  [OK] {out}")
@@ -745,10 +765,10 @@ def fig6_ablation():
     axes[1].legend(loc="upper left", fontsize=6, framealpha=0.4)
 
     fig.suptitle(
-        "Fig. 6 — Ablation: Clean Pipeline vs Look-Ahead Leakage (center=True)",
+        "Fig. 7 — Ablation: Clean Pipeline vs Look-Ahead Leakage (center=True)",
         fontsize=9, fontweight="bold")
     fig.tight_layout()
-    out = os.path.join(FIGS, "fig6_ablation.pdf")
+    out = os.path.join(FIGS, "fig7_ablation.pdf")
     fig.savefig(out)
     plt.close(fig)
     print(f"  [OK] {out}")

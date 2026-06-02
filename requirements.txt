@@ -20,6 +20,9 @@ torch>=2.0.0
 # ── Visualization ───────────────────────────────────────────
 matplotlib>=3.7.0
 
+# ── Parquet support (tensor_packing metadata) ───────────────
+pyarrow>=14.0.0
+
 # ── Utilities ───────────────────────────────────────────────
 tqdm>=4.65.0
 python-dotenv>=1.0.0

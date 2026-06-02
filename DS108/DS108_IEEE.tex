@@ -33,6 +33,7 @@
 \graphicspath{{../figures/}{figures/}}
 
 %% ── Misc ─────────────────────────────────────────────────────────────────────
+\usepackage{float}
 \usepackage{cite}
 \usepackage{url}
 \usepackage{xcolor}
@@ -445,9 +446,11 @@ kiến thức chuyên gia.}
 \end{figure}
 
 % ─────────────────────────────────────────────────────────────────────────────
-\section{Đóng Gói Tensor Chuỗi Thời Gian}
+\section{Phương Pháp Mô Hình Hóa}
 
-\subsection{Phân Chia 70/10/20 Với Embargo Gap}
+\subsection{Đóng Gói Tensor Chuỗi Thời Gian}
+
+\subsubsection{Phân Chia 70/10/20 Với Embargo Gap}
 
 Phân chia chronological 70/10/20 với embargo gap $h$ hàng tại mỗi biên:
 \begin{equation}
@@ -472,7 +475,7 @@ vùng MinMaxScaler.fit() — chỉ train. Vùng gạch chéo đỏ: embargo gap 
 \label{fig:split}
 \end{figure}
 
-\subsection{Kiến Trúc Tensor Động / Tĩnh}
+\subsubsection{Kiến Trúc Tensor Động / Tĩnh}
 
 $X_\text{dyn} \in \mathbb{R}^{N\times W\times D}$: $W$ bước lịch sử của $D$
 đặc trưng biến động (giá, thời tiết, macro). Window $W \in \{14,30,45\}$
@@ -481,7 +484,7 @@ $S$ đặc trưng chu kỳ tại mốc dự báo (sin/cos week/month, \texttt{is
 Tách riêng tránh lặp $W$ lần trong tensor gây dư thừa bộ nhớ và overfitting.
 
 % ─────────────────────────────────────────────────────────────────────────────
-\section{Thiết Kế Nhãn Mục Tiêu}
+\subsection{Thiết Kế Nhãn Mục Tiêu}
 
 $\texttt{return\_future} = \text{Close}[t+7]/\text{Close}[t] - 1$.
 Bốn định dạng nhãn song song:
@@ -493,7 +496,7 @@ Threshold 2.5\% (thay vì 5\% ở v1) tăng base rate từ 7--18\% lên 30--36\%
 giải quyết class imbalance nghiêm trọng.
 
 % ─────────────────────────────────────────────────────────────────────────────
-\section{Kiến Trúc Mô Hình}
+\subsection{Kiến Trúc Mô Hình}
 
 \textbf{LightGBM:} \texttt{num\_leaves=7}, \texttt{reg\_lambda=5.0},
 \texttt{min\_child\_samples=30}; walkforward CV (window=520, step=130 rows)
@@ -599,7 +602,7 @@ curves của hai chiến lược có alpha dương thực sự.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\columnwidth]{fig4_equity.pdf}
+\includegraphics[width=\columnwidth]{fig6_equity.pdf}
 \caption{Equity curves trên test set (2022--2025) của hai chiến lược có alpha
 dương thực sự. (a)~Coffee Weekly Binary RF: RF~$+$148.4\% vs B\&H~$+$132.0\%
 (alpha~$+$16.4~pp, Sharpe~0.962). (b)~Corn Daily Multiclass RF Long/Short
@@ -733,10 +736,11 @@ luận: \emph{trong commodity forecasting, downside risk có thể dự báo đ�
 biên độ, upside thì không} --- phát hiện này nhất quán với lý thuyết tài
 chính về bất đối xứng loss aversion và carry risk premium.
 
-\begin{table}[htbp]
+\begin{table}[H]
 \caption{Pearson $r$ — Single Regression vs.\ Full Hurdle}
 \label{tab:hurdle}
 \centering
+\begin{threeparttable}
 \begin{tabular}{@{}lrrrr@{}}
 \toprule
 \textbf{Dataset} & \textbf{Single $r$} & \textbf{Stage 2b $r$} & \textbf{Hurdle $r$} & \textbf{Verdict} \\
@@ -756,6 +760,7 @@ Corn Weekly   & $+$0.151 & NaN & $-$0.093 & Collapse \\
 bất đối xứng downside/upside nhất quán với harvest supply shocks
 và macro policy transmission.
 \end{tablenotes}
+\end{threeparttable}
 \end{table}
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -785,8 +790,9 @@ kết quả ngoài test set.
 
 Phần này tuân theo framework \textit{Datasheets for Datasets}~\cite{gebru2021}.
 
-\textbf{Composition.}
-\begin{table}[htbp]
+\paragraph{Composition.}
+Bảng~\ref{tab:dataset_stats} tóm tắt thống kê bộ dữ liệu DS108-AgriCommodity.
+\begin{table}[H]
 \caption{Thống Kê Bộ Dữ Liệu DS108-AgriCommodity}
 \label{tab:dataset_stats}
 \centering
@@ -802,11 +808,12 @@ Corn Weekly   & 700   & $\sim$84 & 2010--2026 & 37.8\% \\
 \end{tabular}
 \end{table}
 
-\textbf{Collection.} Market: yfinance; Weather: Open-Meteo (CC BY 4.0)
-\cite{zippenfenig2023}; CPI: BLS \cite{bls2026}; Farming: Synthetic.
+\paragraph{Collection.}
+Market: yfinance; Weather: Open-Meteo (CC BY 4.0)~\cite{zippenfenig2023};
+CPI: BLS~\cite{bls2026}; Farming: Synthetic.
 Dataset công khai tại Kaggle (CC BY 4.0, Usability Score 8.82).
 
-\textbf{Known biases.}
+\paragraph{Known biases.}
 \begin{enumerate}
 \item \textit{Thiên lệch địa lý:} Chỉ US (ngô) và Brazil (cà phê). Bỏ qua
 Việt Nam (cà phê thứ 2 thế giới), Colombia, Indonesia, Trung Quốc.
@@ -818,9 +825,9 @@ lịch sử, không phản ánh biến đổi theo năm do khí hậu.
 hay risk sentiment toàn cầu.
 \end{enumerate}
 
-\textbf{Ethical considerations.} Mô hình không phải lời khuyên đầu tư. Cần
-quản trị rủi ro và paper trading $\geq$12 tháng trước khi deploy production.
-Không có PII trong dataset.
+\paragraph{Ethical considerations.}
+Mô hình không phải lời khuyên đầu tư. Cần quản trị rủi ro và paper trading
+$\geq$12 tháng trước khi deploy production. Không có PII trong dataset.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section*{Acknowledgment}

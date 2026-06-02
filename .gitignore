@@ -47,10 +47,25 @@ Thumbs.db
 
 # Claude Code workspace (internal)
 .claude/
+CLAUDE.md
+
+# Trash folder
+trash/
 
 # Separate dashboard project — has its own Vercel repo (DS108_DataDashBoard)
 ds108-dashboard/
 DashBoardDs108/
+
+# Model intermediate outputs (regenerable by running scripts)
+models/**/val_predictions_*.csv
+models/**/backtest_results_integrated_*.csv
+models/**/backtest_results_mc_all*.csv
+models/**/backtest_results_reg_all*.csv
+models/**/*.log
+models/**/*.txt
+
+# Kaggle dataset (derived from data/integrated/ — upload via Kaggle API separately)
+kaggle_dataset/
 
 # Internal development artifacts (versioned reports, planning docs)
 PIPELINE_REPORT_v*.md
