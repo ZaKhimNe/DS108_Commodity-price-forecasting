@@ -9,7 +9,11 @@ raw_weather_path = os.path.join(PROJECT_ROOT, "data", "raw", "weather")
 despiked_path = os.path.join(PROJECT_ROOT, "data", "preprocessed", "weather", "weather_despiked")
 os.makedirs(despiked_path, exist_ok=True)
 
-def apply_miqr(df, column_name, window=15, k=3.0):
+def apply_miqr(df, column_name, window=15, k=3.0, sustained_days=7):
+    """
+    Áp dụng MIQR nhưng bảo toàn các tín hiệu khí hậu cực đoan kéo dài (hạn hán, sóng nhiệt).
+    Chỉ xóa (đánh NaN) các gai nhiễu đơn lẻ (isolated spikes < sustained_days).
+    """
     if column_name not in df.columns:
         return df
 
@@ -20,13 +24,27 @@ def apply_miqr(df, column_name, window=15, k=3.0):
     lower_bound = Q1 - k * IQR
     upper_bound = Q3 + k * IQR
     
+    # Phát hiện tất cả các điểm vượt ngưỡng
     is_anomaly = (df[column_name] < lower_bound) | (df[column_name] > upper_bound)
     
-    df.loc[is_anomaly, column_name] = np.nan
+    # Tách các đợt biến động liên tiếp thành các block
+    blocks = (~is_anomaly).cumsum()
+    # Đếm số ngày liên tục vượt ngưỡng trong mỗi block
+    anomaly_counts = is_anomaly.groupby(blocks).transform('sum')
     
-    num_anomalies = is_anomaly.sum()
-    if num_anomalies > 0:
-        print(f"   -> Cột {column_name}: Đã chuyển {num_anomalies} điểm nhiễu đột biến (Spike) thành NaN.")
+    # Phân loại: Gai nhiễu (dưới 7 ngày) và Sự kiện khí hậu thực sự (>= 7 ngày)
+    isolated_spikes = is_anomaly & (anomaly_counts < sustained_days)
+    sustained_events = is_anomaly & (anomaly_counts >= sustained_days)
+    
+    # Chỉ đánh NaN cho gai nhiễu đơn lẻ
+    df.loc[isolated_spikes, column_name] = np.nan
+    
+    num_spikes = isolated_spikes.sum()
+    num_sustained = sustained_events.sum()
+    
+    if num_spikes > 0 or num_sustained > 0:
+        print(f"   -> Cột {column_name}: Chuyển {num_spikes} điểm nhiễu (Spike) thành NaN. "
+              f"Bảo toàn {num_sustained} điểm thuộc sự kiện thời tiết kéo dài (>= {sustained_days} ngày).")
         
     return df
 
@@ -64,8 +82,8 @@ if __name__ == "__main__":
                 continuous_cols = ['temperature_2m_max', 'temperature_2m_min', 'et0_fao_evapotranspiration', 'vpd_max']
                 
                 for col in continuous_cols:
-                    # 1. Cắt nhiễu đột biến
-                    df = apply_miqr(df, col, window=15, k=3.0)
+                    # 1. Cắt nhiễu đột biến (sustained_days=7: bảo toàn đợt hạn hán >= 7 ngày)
+                    df = apply_miqr(df, col, window=15, k=3.0, sustained_days=7)
                     
                     # 2. Xử lý lỗi kẹt cảm biến
                     df = apply_rolling_flatline_detection(df, col, window=5, std_threshold=1e-4, dead_days_threshold=4)

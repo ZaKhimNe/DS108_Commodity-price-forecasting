@@ -57,8 +57,8 @@ TRAIN_LOOKBACK_ROWS = {"daily": 1000, "weekly": None}
 # WALKFORWARD_TRAIN_ROWS rows. Addresses regime shift (best_iter=1 on fixed split).
 # Set WALKFORWARD_DAILY=False to revert to the old fixed-split behaviour.
 WALKFORWARD_DAILY      = True   # rolling train window for daily datasets
-WALKFORWARD_TRAIN_ROWS = 520    # ~2 năm trading days
-WALKFORWARD_STEP_ROWS  = 130    # retrain every ~6 months
+WALKFORWARD_TRAIN_ROWS = 1000    # Tăng kích thước mẫu nền
+WALKFORWARD_STEP_ROWS  = 130   # retrain every ~6 months
 
 # LightGBM params cơ bản — override theo daily/weekly ở dưới
 PARAMS_BASE = dict(
@@ -67,18 +67,18 @@ PARAMS_BASE = dict(
     verbose            = -1,
     random_state       = 42,
     n_estimators       = 2000,
-    learning_rate      = 0.02,
-    num_leaves         = 7,
+    learning_rate      = 0.015,       # Giảm tốc độ học để tăng tính ổn định
+    num_leaves         = 6,           # Hạ bớt 1 lá để khống chế độ sâu cấu trúc
     max_depth          = 4,
-    min_child_samples  = 30,
+    min_child_samples  = 35,          # Hạ từ 50 xuống 35 để phù hợp với phân bổ mẫu
     min_child_weight   = 5,
+    min_split_gain     = 0.02,        # Hạ ngưỡng gain để cây có thể phân nhánh mịn
     subsample          = 0.7,
     subsample_freq     = 1,
     colsample_bytree   = 0.6,
     reg_alpha          = 1.0,
-    reg_lambda         = 5.0,
+    reg_lambda         = 10.0,        # Đưa về mức 10.0 để giảm áp lực co hẹp trọng số
 )
-
 # Weekly có ít sample hơn → giảm complexity mạnh hơn để tránh overfit
 PARAMS_WEEKLY_OVERRIDE = dict(
     learning_rate     = 0.01,
@@ -175,13 +175,13 @@ def compute_scale_pos_weight(y: np.ndarray) -> float:
     """
     scale_pos_weight = #negative / #positive.
     LightGBM nhân loss của positive class lên để compensate imbalance.
-    Cap tại 10 để tránh training không ổn định.
+    Cap tại 10 để tránh training không ổn định khi base rate rất thấp.
     """
     pos = y.sum()
     neg = len(y) - pos
     if pos == 0:
         return 1.0
-    return float(min(neg / pos, 5.0))
+    return float(min(neg / pos, 10.0))
 
 
 # ─── Threshold Tuning ─────────────────────────────────────────────────────────
@@ -262,15 +262,6 @@ def run_walkforward_test(
     feature_cols: list[str],
     params_base: dict,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Generate test predictions using rolling train-window models.
-
-    For each WALKFORWARD_STEP_ROWS-sized chunk in the test period, we train a fresh
-    LGBMClassifier on the WALKFORWARD_TRAIN_ROWS rows immediately preceding that
-    chunk.  Addresses regime shift: only recent history is in scope for each window.
-
-    Returns: (y_true_concat, y_prob_concat) — same length as test period.
-    """
     n          = len(full_df)
     all_probs: list[np.ndarray] = []
     all_true:  list[np.ndarray] = []
@@ -286,7 +277,7 @@ def run_walkforward_test(
         X_tr_full, y_tr_full, _ = prepare_features(win_train, feature_cols)
         X_te,      y_te,      _ = prepare_features(win_test,  feature_cols)
 
-        # Use last 15% of window as internal val for early stopping
+        # Tách 15% cuối window làm val nội bộ cho early stopping
         n_val_wf = max(30, int(len(y_tr_full) * 0.15))
         X_tr     = X_tr_full.iloc[:-n_val_wf]
         y_tr     = y_tr_full[:-n_val_wf]
@@ -301,16 +292,13 @@ def run_walkforward_test(
             X_tr, y_tr,
             eval_set  = [(X_wv, y_wv)],
             callbacks = [
-                lgb.early_stopping(stopping_rounds=50, verbose=False),
+                lgb.early_stopping(stopping_rounds=30, verbose=False),
                 lgb.log_evaluation(period=-1),
             ],
         )
         bi = getattr(m, "best_iteration_", p["n_estimators"])
         pos_rate = float(y_tr.mean())
-        print(
-            f"   [WF] rows=[{start}:{end}]  train=[{train_s}:{start}]"
-            f"  best_iter={bi}  pos={pos_rate:.3f}"
-        )
+        print(f"   [WF] rows=[{start}:{end}]  train=[{train_s}:{start}]  best_iter={bi}  pos={pos_rate:.3f}")
 
         all_probs.append(m.predict_proba(X_te)[:, 1])
         all_true.append(y_te)
@@ -319,7 +307,6 @@ def run_walkforward_test(
     total = sum(len(p) for p in all_probs)
     print(f"   Walkforward: {n_windows} windows → {total} test rows")
     return np.concatenate(all_true), np.concatenate(all_probs)
-
 
 # ─── Main Pipeline ────────────────────────────────────────────────────────────
 
@@ -388,7 +375,7 @@ def run_pipeline(file_name: str) -> dict | None:
         X_train, y_train,
         eval_set    = [(X_val, y_val)],
         callbacks   = [
-            lgb.early_stopping(stopping_rounds=50, verbose=False),
+            lgb.early_stopping(stopping_rounds=30, verbose=False),
             lgb.log_evaluation(period=200),
         ],
     )
